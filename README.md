@@ -23,3 +23,14 @@ current functionality is:
 signup (on swagger docs (localhost:8000/docs)) + click the users button to get a list of users
 
 db, backend and frontend are currently all connected
+
+
+IGDB SETUP:
+
+Needs a key for this from twitch, we need both a client id and a client secret for this
+
+https://dev.twitch.tv/console/apps/create
+
+Set client type to condidential and use https://localhost/ for the Redirect URL (not used)
+
+Click manage then save client id and the secret to the .env file.
