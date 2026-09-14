@@ -34,8 +34,9 @@ def create_user(
     db: Session = Depends(get_db),
 ):
     new_user = User(
-        name=user.name,
         email=user.email,
+        username=user.username,
+        password=user.password,
     )
 
     db.add(new_user)
