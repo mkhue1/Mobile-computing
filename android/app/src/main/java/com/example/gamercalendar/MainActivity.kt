@@ -8,7 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.gamercalendar.ui.screens.UsersScreen
+import com.example.gamercalendar.ui.screens.CalendarScreen
 import com.example.gamercalendar.ui.theme.GamerCalendarTheme
 
 class MainActivity : ComponentActivity() {
@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             GamerCalendarTheme {
-                UsersScreen()
+                CalendarScreen()
             }
         }
     }
