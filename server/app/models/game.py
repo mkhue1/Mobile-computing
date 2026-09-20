@@ -1,4 +1,5 @@
 from datetime import datetime
+import uuid
 
 from sqlalchemy import (
     BigInteger,
@@ -6,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     String,
     Text,
+    Uuid,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,10 +18,10 @@ from app.database import Base
 class Game(Base):
     __tablename__ = "games"
 
-    id: Mapped[int] = mapped_column(
-        BigInteger,
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         primary_key=True,
-        autoincrement=True,
+        default=uuid.uuid4,
     )
 
     igdb_id: Mapped[int] = mapped_column(
@@ -47,8 +49,8 @@ class Game(Base):
 class UserFavouriteGame(Base):
     __tablename__ = "user_favourite_games"
 
-    user_id: Mapped[int] = mapped_column(
-        BigInteger,
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
@@ -56,8 +58,8 @@ class UserFavouriteGame(Base):
         primary_key=True,
     )
 
-    game_id: Mapped[int] = mapped_column(
-        BigInteger,
+    game_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "games.id",
             ondelete="CASCADE",

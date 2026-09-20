@@ -1,11 +1,12 @@
 from datetime import datetime
+import uuid
 
 from sqlalchemy import (
-    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
     UniqueConstraint,
+    Uuid,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,14 +17,14 @@ from app.database import Base
 class FriendRequest(Base):
     __tablename__ = "friend_requests"
 
-    id: Mapped[int] = mapped_column(
-        BigInteger,
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         primary_key=True,
-        autoincrement=True,
+        default=uuid.uuid4,
     )
 
-    sender_id: Mapped[int] = mapped_column(
-        BigInteger,
+    sender_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
@@ -31,8 +32,8 @@ class FriendRequest(Base):
         nullable=False,
     )
 
-    receiver_id: Mapped[int] = mapped_column(
-        BigInteger,
+    receiver_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
@@ -62,8 +63,8 @@ class FriendRequest(Base):
 class Friendship(Base):
     __tablename__ = "friendships"
 
-    user_id: Mapped[int] = mapped_column(
-        BigInteger,
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
@@ -71,8 +72,8 @@ class Friendship(Base):
         primary_key=True,
     )
 
-    friend_id: Mapped[int] = mapped_column(
-        BigInteger,
+    friend_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
