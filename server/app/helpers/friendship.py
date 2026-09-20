@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -5,16 +7,16 @@ from app.models.friendship import Friendship
 from app.models.user import User
 
 
-def ordered_friend_pair(user_a: int, user_b: int) -> tuple[int, int]:
+def ordered_friend_pair(user_a: UUID, user_b: UUID) -> tuple[UUID, UUID]:
     """Canonical undirected friendship edge (user_id < friend_id)."""
     return (user_a, user_b) if user_a < user_b else (user_b, user_a)
 
 
-def get_user_or_none(db: Session, user_id: int) -> User | None:
+def get_user_or_none(db: Session, user_id: UUID) -> User | None:
     return db.get(User, user_id)
 
 
-def are_friends(db: Session, user_a: int, user_b: int) -> bool:
+def are_friends(db: Session, user_a: UUID, user_b: UUID) -> bool:
     if user_a == user_b:
         return False
 
@@ -26,7 +28,7 @@ def are_friends(db: Session, user_a: int, user_b: int) -> bool:
     return db.scalars(statement).first() is not None
 
 
-def get_friendship(db: Session, user_a: int, user_b: int) -> Friendship | None:
+def get_friendship(db: Session, user_a: UUID, user_b: UUID) -> Friendship | None:
     low, high = ordered_friend_pair(user_a, user_b)
     statement = select(Friendship).where(
         Friendship.user_id == low,
@@ -35,7 +37,7 @@ def get_friendship(db: Session, user_a: int, user_b: int) -> Friendship | None:
     return db.scalars(statement).first()
 
 
-def list_friend_ids(db: Session, user_id: int) -> list[int]:
+def list_friend_ids(db: Session, user_id: UUID) -> list[UUID]:
     statement = select(Friendship).where(
         or_(
             Friendship.user_id == user_id,
@@ -51,8 +53,8 @@ def list_friend_ids(db: Session, user_id: int) -> list[int]:
 
 def share_a_friend_in_group(
     db: Session,
-    user_id: int,
-    group_member_ids: set[int],
+    user_id: UUID,
+    group_member_ids: set[UUID],
 ) -> bool:
     """True if user_id is friends with at least one member of the group."""
     if not group_member_ids:

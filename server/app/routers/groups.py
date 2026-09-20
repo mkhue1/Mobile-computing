@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,7 +30,7 @@ router = APIRouter(
 )
 
 
-def _require_user(db: Session, user_id: int) -> User:
+def _require_user(db: Session, user_id: UUID) -> User:
     user = get_user_or_none(db, user_id)
     if user is None:
         raise HTTPException(
@@ -38,7 +40,7 @@ def _require_user(db: Session, user_id: int) -> User:
     return user
 
 
-def _get_group_or_404(db: Session, group_id: int) -> UserGroup:
+def _get_group_or_404(db: Session, group_id: UUID) -> UserGroup:
     group = db.get(UserGroup, group_id)
     if group is None:
         raise HTTPException(
@@ -50,8 +52,8 @@ def _get_group_or_404(db: Session, group_id: int) -> UserGroup:
 
 def _get_membership(
     db: Session,
-    group_id: int,
-    user_id: int,
+    group_id: UUID,
+    user_id: UUID,
 ) -> UserGroupMember | None:
     return db.scalars(
         select(UserGroupMember).where(
@@ -63,8 +65,8 @@ def _get_membership(
 
 def _require_membership(
     db: Session,
-    group_id: int,
-    user_id: int,
+    group_id: UUID,
+    user_id: UUID,
 ) -> UserGroupMember:
     membership = _get_membership(db, group_id, user_id)
     if membership is None:
@@ -75,7 +77,7 @@ def _require_membership(
     return membership
 
 
-def _require_owner(db: Session, group: UserGroup, user_id: int) -> None:
+def _require_owner(db: Session, group: UserGroup, user_id: UUID) -> None:
     if group.owner_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -83,7 +85,7 @@ def _require_owner(db: Session, group: UserGroup, user_id: int) -> None:
         )
 
 
-def _group_member_ids(db: Session, group_id: int) -> set[int]:
+def _group_member_ids(db: Session, group_id: UUID) -> set[UUID]:
     rows = db.scalars(
         select(UserGroupMember.user_id).where(
             UserGroupMember.group_id == group_id
@@ -100,7 +102,7 @@ def _build_group_detail(db: Session, group: UserGroup) -> GroupDetailResponse:
     ).all()
 
     user_ids = [member.user_id for member in members]
-    users_by_id: dict[int, User] = {}
+    users_by_id: dict[UUID, User] = {}
     if user_ids:
         users = db.scalars(select(User).where(User.id.in_(user_ids))).all()
         users_by_id = {user.id: user for user in users}
@@ -136,7 +138,7 @@ def _build_group_detail(db: Session, group: UserGroup) -> GroupDetailResponse:
 )
 def create_group(
     body: GroupCreate,
-    user_id: int = Query(..., gt=0, description="Acting user id (owner)"),
+    user_id: UUID = Query(..., description="Acting user id (owner)"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)
@@ -162,7 +164,7 @@ def create_group(
     response_model=list[GroupResponse],
 )
 def list_groups(
-    user_id: int = Query(..., gt=0, description="Acting user id"),
+    user_id: UUID = Query(..., description="Acting user id"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)
@@ -183,8 +185,8 @@ def list_groups(
     response_model=GroupDetailResponse,
 )
 def get_group(
-    group_id: int,
-    user_id: int = Query(..., gt=0, description="Acting user id"),
+    group_id: UUID,
+    user_id: UUID = Query(..., description="Acting user id"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)
@@ -198,9 +200,9 @@ def get_group(
     response_model=GroupResponse,
 )
 def update_group(
-    group_id: int,
+    group_id: UUID,
     body: GroupUpdate,
-    user_id: int = Query(..., gt=0, description="Acting user id"),
+    user_id: UUID = Query(..., description="Acting user id"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)
@@ -218,8 +220,8 @@ def update_group(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def destroy_group(
-    group_id: int,
-    user_id: int = Query(..., gt=0, description="Acting user id"),
+    group_id: UUID,
+    user_id: UUID = Query(..., description="Acting user id"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)
@@ -237,9 +239,9 @@ def destroy_group(
     status_code=status.HTTP_201_CREATED,
 )
 def add_friend_to_group(
-    group_id: int,
+    group_id: UUID,
     body: GroupMemberAdd,
-    user_id: int = Query(..., gt=0, description="Acting user id"),
+    user_id: UUID = Query(..., description="Acting user id"),
     db: Session = Depends(get_db),
 ):
     """Add a friend to a group. Actor must be a member; target must be their friend."""
@@ -290,8 +292,8 @@ def add_friend_to_group(
     status_code=status.HTTP_201_CREATED,
 )
 def join_group(
-    group_id: int,
-    user_id: int = Query(..., gt=0, description="Acting user id"),
+    group_id: UUID,
+    user_id: UUID = Query(..., description="Acting user id"),
     db: Session = Depends(get_db),
 ):
     """Join a group that at least one of your friends already belongs to."""
@@ -334,9 +336,9 @@ def join_group(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def remove_or_leave_group(
-    group_id: int,
-    member_id: int,
-    user_id: int = Query(..., gt=0, description="Acting user id"),
+    group_id: UUID,
+    member_id: UUID,
+    user_id: UUID = Query(..., description="Acting user id"),
     db: Session = Depends(get_db),
 ):
     """
@@ -380,9 +382,9 @@ def remove_or_leave_group(
     response_model=GroupDetailResponse,
 )
 def transfer_ownership(
-    group_id: int,
+    group_id: UUID,
     body: GroupOwnershipTransfer,
-    user_id: int = Query(..., gt=0, description="Acting user id (current owner)"),
+    user_id: UUID = Query(..., description="Acting user id (current owner)"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)

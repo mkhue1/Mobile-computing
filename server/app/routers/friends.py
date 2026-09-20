@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -26,7 +28,7 @@ router = APIRouter(
 )
 
 
-def _require_user(db: Session, user_id: int) -> User:
+def _require_user(db: Session, user_id: UUID) -> User:
     user = get_user_or_none(db, user_id)
     if user is None:
         raise HTTPException(
@@ -41,7 +43,7 @@ def _require_user(db: Session, user_id: int) -> User:
     response_model=list[UserResponse],
 )
 def list_friends(
-    user_id: int = Query(..., gt=0, description="Acting user id"),
+    user_id: UUID = Query(..., description="Acting user id"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)
@@ -60,7 +62,7 @@ def list_friends(
 )
 def send_friend_request(
     body: FriendRequestCreate,
-    user_id: int = Query(..., gt=0, description="Acting user id (sender)"),
+    user_id: UUID = Query(..., description="Acting user id (sender)"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)
@@ -117,7 +119,7 @@ def send_friend_request(
     response_model=list[FriendRequestResponse],
 )
 def list_friend_requests(
-    user_id: int = Query(..., gt=0, description="Acting user id"),
+    user_id: UUID = Query(..., description="Acting user id"),
     direction: str = Query(
         "incoming",
         pattern="^(incoming|outgoing|all)$",
@@ -151,8 +153,8 @@ def list_friend_requests(
     response_model=FriendshipResponse,
 )
 def accept_friend_request(
-    request_id: int,
-    user_id: int = Query(..., gt=0, description="Acting user id (receiver)"),
+    request_id: UUID,
+    user_id: UUID = Query(..., description="Acting user id (receiver)"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)
@@ -181,7 +183,10 @@ def accept_friend_request(
     sender_id = request.sender_id
     receiver_id = request.receiver_id
     low, high = ordered_friend_pair(sender_id, receiver_id)
-    friendship = Friendship(user_id=low, friend_id=high)
+    friendship = Friendship(
+        user_id=low,
+        friend_id=high,
+    )
     db.add(friendship)
 
     # Clear this request and any reverse pending request.
@@ -205,8 +210,8 @@ def accept_friend_request(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def decline_friend_request(
-    request_id: int,
-    user_id: int = Query(..., gt=0, description="Acting user id (receiver)"),
+    request_id: UUID,
+    user_id: UUID = Query(..., description="Acting user id (receiver)"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)
@@ -234,8 +239,8 @@ def decline_friend_request(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def remove_friend(
-    friend_id: int,
-    user_id: int = Query(..., gt=0, description="Acting user id"),
+    friend_id: UUID,
+    user_id: UUID = Query(..., description="Acting user id"),
     db: Session = Depends(get_db),
 ):
     _require_user(db, user_id)

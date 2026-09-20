@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,16 +16,16 @@ class GroupUpdate(BaseModel):
 
 
 class GroupMemberAdd(BaseModel):
-    user_id: int = Field(..., gt=0)
+    user_id: UUID
 
 
 class GroupOwnershipTransfer(BaseModel):
-    new_owner_id: int = Field(..., gt=0)
+    new_owner_id: UUID
 
 
 class GroupMemberResponse(BaseModel):
-    group_id: int
-    user_id: int
+    group_id: UUID
+    user_id: UUID
     role: GroupRole
     joined_at: datetime
     user: UserResponse | None = None
@@ -33,9 +34,9 @@ class GroupMemberResponse(BaseModel):
 
 
 class GroupResponse(BaseModel):
-    id: int
+    id: UUID
     name: str
-    owner_id: int
+    owner_id: UUID
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
