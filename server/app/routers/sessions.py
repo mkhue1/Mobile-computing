@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends
-from server.app.helpers.session import isFull
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionType, SessionVisibility, InviteStatus
-from app.schemas.session import InviteAccept, InviteAcceptResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteDeclineResponse, InviteResponse, SessionResponse, SessionCreate
+from app.schemas.session import InviteAccept, InviteAcceptResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteDeclineResponse, SessionResponse, SessionCreate
 
 
 
@@ -58,7 +57,7 @@ def create_session(
 
 @router.post(
     "/{session_id}/invite",
-    response_model=InviteResponse,
+    response_model=InviteCreateResponse,
 )
 def create_invite(
     invite: InviteCreate,
@@ -76,6 +75,8 @@ def create_invite(
 
     return InviteCreateResponse(**new_invite)
 
+
+#TODO use authentication to confirm making the request is the one invited
 @router.post(
     "/{session_id}/accept",
     response_model=InviteAcceptResponse,
@@ -85,7 +86,11 @@ def accept_invite(
     db: Session = Depends(get_db),
 ):
     session_participant = SessionParticipant(session_id = invite.session_id, user_id = invite.receiver_id)
-    if (not isFull(db,invite.session_id, invite.invite_id, invite.accepter_id)): #TODO: concurrency controls
+
+    result = db.execute(
+            select(GamingSession.player_count, GamingSession.player_limit).where(GamingSession.id == invite.session_id).with_for_update(read=True).first()
+        )
+    if result.player_count < result.player_limit:
         session_invite = db.get(SessionInvite, invite.invite_id)
         session_invite.status = InviteStatus("accepted")
         db.add(session_participant)

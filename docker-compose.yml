@@ -5,6 +5,11 @@ services:
       - "8000:8000"
     volumes:
       - ./server:/app
+    develop:
+      watch:
+        - action: sync
+          path: ./server
+          target: /app
     env_file:
       - .env
     depends_on:
