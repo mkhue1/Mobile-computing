@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, EmailStr
 from app.models.gaming_session import InviteStatus, SessionType, SessionVisibility, SessionStatus
 
 class SessionCreate(BaseModel):
-    organiser_id: UUID
     game_id: UUID
     group_id: UUID | None = None
 
@@ -49,7 +48,6 @@ class SessionResponse(BaseModel):
 
 class InviteCreate(BaseModel):
     session_id: UUID
-    sender_id: UUID
     receiver_id: UUID
 
 class InviteCreateResponse(BaseModel):
@@ -77,12 +75,9 @@ class InviteResponse(BaseModel):
 
 class InviteAccept(BaseModel):
     invite_id: UUID
-    session_id: UUID
-    receiver_id: UUID
 
 class InviteDecline(BaseModel):
     invite_id: UUID
-    receiver_id: UUID
 
 class InviteAcitionResponse(BaseModel):
     status: bool
