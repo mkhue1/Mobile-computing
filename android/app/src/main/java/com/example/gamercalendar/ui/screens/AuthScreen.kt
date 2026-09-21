@@ -19,15 +19,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.gamercalendar.ui.components.AppScaffold
-import com.example.gamercalendar.ui.components.DefaultButton
-import com.example.gamercalendar.ui.components.DefaultTextField
-import com.example.gamercalendar.ui.components.PasswordTextField
-import com.example.gamercalendar.ui.components.ScreenContainer
+import com.example.gamercalendar.ui.components.app.AppScaffold
+import com.example.gamercalendar.ui.components.feedback.ErrorText
+import com.example.gamercalendar.ui.components.buttons.DefaultButton
+import com.example.gamercalendar.ui.components.inputs.DefaultTextField
+import com.example.gamercalendar.ui.components.inputs.PasswordTextField
+import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.util.AuthValidation
 import com.example.gamercalendar.viewmodel.AuthViewModel
 
@@ -148,10 +148,8 @@ fun AuthScreen(
                 }
 
                 uiState.error?.let {
-                    Text(
+                    ErrorText(
                         text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
                     )
                 }
 

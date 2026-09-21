@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.components
+package com.example.gamercalendar.ui.components.app
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets

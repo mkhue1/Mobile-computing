@@ -17,10 +17,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.api.ApiClient
 import com.example.gamercalendar.data.repository.AuthRepository
 import com.example.gamercalendar.data.session.SessionManager
-import com.example.gamercalendar.ui.components.AppScaffold
-import com.example.gamercalendar.ui.components.ScreenContainer
+import com.example.gamercalendar.ui.components.app.AppScaffold
+import com.example.gamercalendar.ui.components.layout.ScreenContainer
+import com.example.gamercalendar.ui.navigation.AppNavigation
 import com.example.gamercalendar.ui.screens.AuthScreen
-import com.example.gamercalendar.ui.screens.UsersScreen
 import com.example.gamercalendar.ui.theme.GamerCalendarTheme
 import com.example.gamercalendar.viewmodel.AuthViewModel
 
@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     !token.isNullOrBlank() -> {
-                        UsersScreen(authViewModel = authViewModel)
+                        AppNavigation(authViewModel = authViewModel)
                     }
                     else -> {
                         AuthScreen(authViewModel = authViewModel)

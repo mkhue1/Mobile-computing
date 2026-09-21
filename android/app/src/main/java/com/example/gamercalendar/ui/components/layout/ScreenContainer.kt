@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.components
+package com.example.gamercalendar.ui.components.layout
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

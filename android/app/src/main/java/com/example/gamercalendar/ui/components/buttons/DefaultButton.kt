@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.components
+package com.example.gamercalendar.ui.components.buttons
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
