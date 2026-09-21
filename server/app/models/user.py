@@ -1,6 +1,7 @@
 from datetime import datetime
+import uuid
 
-from sqlalchemy import BigInteger, DateTime, String, func
+from sqlalchemy import DateTime, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -9,10 +10,10 @@ from app.database import Base
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(
-        BigInteger,
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         primary_key=True,
-        autoincrement=True,
+        default=uuid.uuid4,
     )
 
     email: Mapped[str] = mapped_column(

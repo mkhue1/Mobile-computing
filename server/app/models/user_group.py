@@ -1,12 +1,13 @@
 from datetime import datetime
 from enum import Enum
+import uuid
 
 from sqlalchemy import (
-    BigInteger,
     DateTime,
     Enum as SQLEnum,
     ForeignKey,
     String,
+    Uuid,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,10 +23,10 @@ class GroupRole(str, Enum):
 class UserGroup(Base):
     __tablename__ = "user_groups"
 
-    id: Mapped[int] = mapped_column(
-        BigInteger,
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         primary_key=True,
-        autoincrement=True,
+        default=uuid.uuid4,
     )
 
     name: Mapped[str] = mapped_column(
@@ -33,8 +34,8 @@ class UserGroup(Base):
         nullable=False,
     )
 
-    owner_id: Mapped[int] = mapped_column(
-        BigInteger,
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
@@ -52,8 +53,8 @@ class UserGroup(Base):
 class UserGroupMember(Base):
     __tablename__ = "user_group_members"
 
-    group_id: Mapped[int] = mapped_column(
-        BigInteger,
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "user_groups.id",
             ondelete="CASCADE",
@@ -61,8 +62,8 @@ class UserGroupMember(Base):
         primary_key=True,
     )
 
-    user_id: Mapped[int] = mapped_column(
-        BigInteger,
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",

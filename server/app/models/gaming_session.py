@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import Enum
+import uuid
 
 from sqlalchemy import (
-    BigInteger,
     CheckConstraint,
     DateTime,
     Enum as SQLEnum,
@@ -11,6 +11,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -42,17 +43,24 @@ class InviteStatus(str, Enum):
     DECLINED = "declined"
 
 
+class RecurrenceFrequency(str, Enum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    FORTNIGHTLY = "fortnightly"
+    MONTHLY = "monthly"
+
+
 class GamingSession(Base):
     __tablename__ = "sessions"
 
-    id: Mapped[int] = mapped_column(
-        BigInteger,
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         primary_key=True,
-        autoincrement=True,
+        default=uuid.uuid4,
     )
 
-    organiser_id: Mapped[int] = mapped_column(
-        BigInteger,
+    organiser_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
@@ -60,14 +68,14 @@ class GamingSession(Base):
         nullable=False,
     )
 
-    game_id: Mapped[int] = mapped_column(
-        BigInteger,
+    game_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey("games.id"),
         nullable=False,
     )
 
-    group_id: Mapped[int | None] = mapped_column(
-        BigInteger,
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
         ForeignKey(
             "user_groups.id",
             ondelete="SET NULL",
@@ -93,6 +101,22 @@ class GamingSession(Base):
     end_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
+    )
+
+    recurrence: Mapped[RecurrenceFrequency | None] = mapped_column(
+        SQLEnum(
+            RecurrenceFrequency,
+            name="recurrence_frequency",
+            values_callable=lambda enum: [
+                member.value for member in enum
+            ],
+        ),
+        nullable=True,
+    )
+
+    recurrence_end_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     session_type: Mapped[SessionType] = mapped_column(
@@ -166,14 +190,18 @@ class GamingSession(Base):
             "visibility <> 'group' OR group_id IS NOT NULL",
             name="ck_sessions_group_visibility",
         ),
+        CheckConstraint(
+            "recurrence_end_at IS NULL OR recurrence_end_at > start_at",
+            name="ck_sessions_recurrence_end_after_start",
+        ),
     )
 
 
 class SessionParticipant(Base):
     __tablename__ = "session_participants"
 
-    session_id: Mapped[int] = mapped_column(
-        BigInteger,
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "sessions.id",
             ondelete="CASCADE",
@@ -181,8 +209,8 @@ class SessionParticipant(Base):
         primary_key=True,
     )
 
-    user_id: Mapped[int] = mapped_column(
-        BigInteger,
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
@@ -200,14 +228,14 @@ class SessionParticipant(Base):
 class SessionInvite(Base):
     __tablename__ = "session_invites"
 
-    id: Mapped[int] = mapped_column(
-        BigInteger,
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         primary_key=True,
-        autoincrement=True,
+        default=uuid.uuid4,
     )
 
-    session_id: Mapped[int] = mapped_column(
-        BigInteger,
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "sessions.id",
             ondelete="CASCADE",
@@ -215,8 +243,8 @@ class SessionInvite(Base):
         nullable=False,
     )
 
-    sender_id: Mapped[int] = mapped_column(
-        BigInteger,
+    sender_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
@@ -224,8 +252,8 @@ class SessionInvite(Base):
         nullable=False,
     )
 
-    receiver_id: Mapped[int] = mapped_column(
-        BigInteger,
+    receiver_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
         ForeignKey(
             "users.id",
             ondelete="CASCADE",
