@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from app.schemas.user_group import (
     GroupResponse,
     GroupUpdate,
 )
+from app.security import get_current_user
 
 
 router = APIRouter(
@@ -138,18 +139,16 @@ def _build_group_detail(db: Session, group: UserGroup) -> GroupDetailResponse:
 )
 def create_group(
     body: GroupCreate,
-    user_id: UUID = Query(..., description="Acting user id (owner)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
-
-    group = UserGroup(name=body.name.strip(), owner_id=user_id)
+    group = UserGroup(name=body.name.strip(), owner_id=current_user.id)
     db.add(group)
     db.flush()
 
     owner_membership = UserGroupMember(
         group_id=group.id,
-        user_id=user_id,
+        user_id=current_user.id,
         role=GroupRole.OWNER,
     )
     db.add(owner_membership)
@@ -164,18 +163,16 @@ def create_group(
     response_model=list[GroupResponse],
 )
 def list_groups(
-    user_id: UUID = Query(..., description="Acting user id"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
-
     statement = (
         select(UserGroup)
         .join(
             UserGroupMember,
             UserGroupMember.group_id == UserGroup.id,
         )
-        .where(UserGroupMember.user_id == user_id)
+        .where(UserGroupMember.user_id == current_user.id)
     )
     return db.scalars(statement).all()
 
@@ -186,12 +183,11 @@ def list_groups(
 )
 def get_group(
     group_id: UUID,
-    user_id: UUID = Query(..., description="Acting user id"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
     group = _get_group_or_404(db, group_id)
-    _require_membership(db, group_id, user_id)
+    _require_membership(db, group_id, current_user.id)
     return _build_group_detail(db, group)
 
 
@@ -202,12 +198,11 @@ def get_group(
 def update_group(
     group_id: UUID,
     body: GroupUpdate,
-    user_id: UUID = Query(..., description="Acting user id"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
     group = _get_group_or_404(db, group_id)
-    _require_owner(db, group, user_id)
+    _require_owner(db, group, current_user.id)
 
     group.name = body.name.strip()
     db.commit()
@@ -221,12 +216,11 @@ def update_group(
 )
 def destroy_group(
     group_id: UUID,
-    user_id: UUID = Query(..., description="Acting user id"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
     group = _get_group_or_404(db, group_id)
-    _require_owner(db, group, user_id)
+    _require_owner(db, group, current_user.id)
 
     db.delete(group)
     db.commit()
@@ -241,22 +235,21 @@ def destroy_group(
 def add_friend_to_group(
     group_id: UUID,
     body: GroupMemberAdd,
-    user_id: UUID = Query(..., description="Acting user id"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Add a friend to a group. Actor must be a member; target must be their friend."""
-    _require_user(db, user_id)
     target = _require_user(db, body.user_id)
     group = _get_group_or_404(db, group_id)
-    _require_membership(db, group_id, user_id)
+    _require_membership(db, group_id, current_user.id)
 
-    if body.user_id == user_id:
+    if body.user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Use POST /groups/{group_id}/join to join a group yourself",
         )
 
-    if not are_friends(db, user_id, body.user_id):
+    if not are_friends(db, current_user.id, body.user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only add friends to a group",
@@ -293,21 +286,20 @@ def add_friend_to_group(
 )
 def join_group(
     group_id: UUID,
-    user_id: UUID = Query(..., description="Acting user id"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Join a group that at least one of your friends already belongs to."""
-    actor = _require_user(db, user_id)
     group = _get_group_or_404(db, group_id)
 
-    if _get_membership(db, group_id, user_id) is not None:
+    if _get_membership(db, group_id, current_user.id) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You are already a member of this group",
         )
 
     member_ids = _group_member_ids(db, group_id)
-    if not share_a_friend_in_group(db, user_id, member_ids):
+    if not share_a_friend_in_group(db, current_user.id, member_ids):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only join a group that a friend belongs to",
@@ -315,7 +307,7 @@ def join_group(
 
     membership = UserGroupMember(
         group_id=group.id,
-        user_id=user_id,
+        user_id=current_user.id,
         role=GroupRole.MEMBER,
     )
     db.add(membership)
@@ -327,7 +319,7 @@ def join_group(
         user_id=membership.user_id,
         role=membership.role,
         joined_at=membership.joined_at,
-        user=UserResponse.model_validate(actor),
+        user=UserResponse.model_validate(current_user),
     )
 
 
@@ -338,16 +330,15 @@ def join_group(
 def remove_or_leave_group(
     group_id: UUID,
     member_id: UUID,
-    user_id: UUID = Query(..., description="Acting user id"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Leave a group (member_id == user_id) or remove another member (owner only).
+    Leave a group (member_id == current user) or remove another member (owner only).
     Owners cannot leave; transfer ownership first.
     """
-    _require_user(db, user_id)
     group = _get_group_or_404(db, group_id)
-    _require_membership(db, group_id, user_id)
+    _require_membership(db, group_id, current_user.id)
 
     target_membership = _get_membership(db, group_id, member_id)
     if target_membership is None:
@@ -356,16 +347,16 @@ def remove_or_leave_group(
             detail="Group member not found",
         )
 
-    leaving = member_id == user_id
+    leaving = member_id == current_user.id
 
     if leaving:
-        if group.owner_id == user_id:
+        if group.owner_id == current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Owner cannot leave the group; transfer ownership first",
             )
     else:
-        _require_owner(db, group, user_id)
+        _require_owner(db, group, current_user.id)
         if group.owner_id == member_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -384,15 +375,14 @@ def remove_or_leave_group(
 def transfer_ownership(
     group_id: UUID,
     body: GroupOwnershipTransfer,
-    user_id: UUID = Query(..., description="Acting user id (current owner)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
     _require_user(db, body.new_owner_id)
     group = _get_group_or_404(db, group_id)
-    _require_owner(db, group, user_id)
+    _require_owner(db, group, current_user.id)
 
-    if body.new_owner_id == user_id:
+    if body.new_owner_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New owner must be a different member",
@@ -405,7 +395,7 @@ def transfer_ownership(
             detail="New owner must already be a group member",
         )
 
-    current_owner_membership = _require_membership(db, group_id, user_id)
+    current_owner_membership = _require_membership(db, group_id, current_user.id)
 
     group.owner_id = body.new_owner_id
     current_owner_membership.role = GroupRole.MEMBER

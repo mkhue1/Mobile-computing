@@ -1,5 +1,7 @@
 package com.example.gamercalendar.data.api
 
+import com.example.gamercalendar.data.model.LoginRequest
+import com.example.gamercalendar.data.model.TokenResponse
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserCreate
 import retrofit2.http.Body
@@ -15,4 +17,12 @@ interface ApiService {
     suspend fun createUser(
         @Body user: UserCreate
     ): User
+
+    @POST("auth/login")
+    suspend fun login(
+        @Body request: LoginRequest
+    ): TokenResponse
+
+    @GET("auth/me")
+    suspend fun me(): User
 }
