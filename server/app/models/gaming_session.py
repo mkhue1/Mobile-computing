@@ -164,6 +164,12 @@ class GamingSession(Base):
         nullable=True,
     )
 
+    player_count: Mapped[int | None] = mapped_column(
+        Integer,
+        default=1,
+        nullable=False,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
