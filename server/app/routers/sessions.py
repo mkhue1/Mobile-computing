@@ -92,7 +92,7 @@ def create_invite(
     session = db.scalars(
             select(GamingSession).where(GamingSession.id == invite.session_id)
         ).first()
-    if session is not None:
+    if session is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Session {invite.session_id} does not exist",
@@ -157,7 +157,7 @@ def accept_invite(
     if session_invite is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Invite {invite.invite_id} not found")
 
-    if current_user.id != session_invite.reciver_id:
+    if current_user.id != session_invite.receiver_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"User is not the receipient of the invite",
@@ -167,26 +167,26 @@ def accept_invite(
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Invite {invite.invite_id} has already been responded to")
     
     gaming_session = db.scalars(
-            select(GamingSession).where(GamingSession.id == invite.session_id).with_for_update()
+            select(GamingSession).where(GamingSession.id == session_invite.session_id).with_for_update()
         ).one_or_none()
 
     if gaming_session is None:
         raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Session {invite.session_id} does not exist",
+                    detail=f"Session {session_invite.session_id} does not exist",
         )
 
     if gaming_session.status is SessionStatus.CANCELLED:
         raise HTTPException(
                     status_code=status.HTTP_409_NOT_FOUND,
-                    detail=f"Session {invite.session_id} cannot be accepted as it is cancelled",
+                    detail=f"Session {session_invite.session_id} cannot be accepted as it is cancelled",
         )
 
     
     if gaming_session.player_limit is not None and gaming_session.player_count >= gaming_session.player_limit:
         raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Session {invite.session_id} is full",
+                    detail=f"Session {session_invite.session_id} is full",
         )
     
     session_participant = SessionParticipant(session_id = invite.session_id, user_id = invite.receiver_id)
