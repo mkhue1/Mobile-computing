@@ -94,7 +94,7 @@ def create_invite(
         ).first()
     if session is None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session {invite.session_id} does not exist",
         )
 
@@ -176,9 +176,9 @@ def accept_invite(
                     detail=f"Session {session_invite.session_id} does not exist",
         )
 
-    if gaming_session.status is SessionStatus.CANCELLED:
+    if gaming_session.status != SessionStatus.OPEN:
         raise HTTPException(
-                    status_code=status.HTTP_409_NOT_FOUND,
+                    status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Session {session_invite.session_id} cannot be accepted as it is cancelled",
         )
 
@@ -189,13 +189,13 @@ def accept_invite(
                     detail=f"Session {session_invite.session_id} is full",
         )
     
-    session_participant = SessionParticipant(session_id = invite.session_id, user_id = invite.receiver_id)
+    session_participant = SessionParticipant(session_id = session_invite.session_id, user_id = session_invite.receiver_id)
     session_invite.status = InviteStatus.ACCEPTED
     session_invite.responded_at = func.now()
     gaming_session.player_count += 1
     db.add(session_participant)
     db.commit()
-    return InviteAcitionResponse(status=True, message="invited accepted", id=invite.session_id)
+    return InviteAcitionResponse(status=True, message="invited accepted", id=session_invite.session_id)
 
 @router.post(
         "/{session_id}/decline", 
