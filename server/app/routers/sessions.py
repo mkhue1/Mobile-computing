@@ -55,6 +55,8 @@ def create_session(
     )
 
     db.add(new_session)
+    db.flush()
+    db.add(SessionParticipant(session_id = new_session.id, user_id = session.organiser_id))
     db.commit()
     db.refresh(new_session)
 

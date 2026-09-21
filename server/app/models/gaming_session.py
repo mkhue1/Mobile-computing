@@ -164,9 +164,10 @@ class GamingSession(Base):
         nullable=True,
     )
 
-    player_count: Mapped[int | None] = mapped_column(
+    player_count: Mapped[int] = mapped_column(
         Integer,
         default=1,
+        server_default="1",
         nullable=False,
     )
 
