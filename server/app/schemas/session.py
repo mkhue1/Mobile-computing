@@ -16,7 +16,6 @@ class SessionCreate(BaseModel):
 
     session_type: SessionType 
     visibility: SessionVisibility
-    status:   SessionStatus
 
     location_name: str | None = None
     player_limit: int | None = None

@@ -28,7 +28,14 @@ def get_sessions(
     current_user: User = Depends(get_current_user),
 
 ):
-    statement = select(GamingSession).where(GamingSession.organiser_id == current_user.id)
+    statement = (
+        select(GamingSession)
+        .join(
+            SessionParticipant,
+            SessionParticipant.session_id == GamingSession.id,
+        )
+        .where(SessionParticipant.user_id == current_user.id)
+    )
 
     return db.scalars(statement).all()
 
@@ -168,6 +175,13 @@ def accept_invite(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Session {invite.session_id} does not exist",
         )
+
+    if gaming_session.status is SessionStatus.CANCELLED:
+        raise HTTPException(
+                    status_code=status.HTTP_409_NOT_FOUND,
+                    detail=f"Session {invite.session_id} cannot be accepted as it is cancelled",
+        )
+
     
     if gaming_session.player_limit is not None and gaming_session.player_count >= gaming_session.player_limit:
         raise HTTPException(
