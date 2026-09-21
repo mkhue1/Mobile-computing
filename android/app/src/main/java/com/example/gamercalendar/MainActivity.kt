@@ -8,16 +8,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.api.ApiClient
 import com.example.gamercalendar.data.repository.AuthRepository
 import com.example.gamercalendar.data.session.SessionManager
+import com.example.gamercalendar.ui.components.AppScaffold
+import com.example.gamercalendar.ui.components.ScreenContainer
 import com.example.gamercalendar.ui.screens.AuthScreen
 import com.example.gamercalendar.ui.screens.UsersScreen
 import com.example.gamercalendar.ui.theme.GamerCalendarTheme
@@ -50,15 +51,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             GamerCalendarTheme {
                 val authViewModel: AuthViewModel = viewModel(factory = authFactory)
-                val uiState by authViewModel.uiState.collectAsState()
-                val token by authViewModel.accessToken.collectAsState()
+                val uiState by authViewModel.uiState.collectAsStateWithLifecycle()
+                val token by authViewModel.accessToken.collectAsStateWithLifecycle()
 
                 when {
                     uiState.isCheckingSession -> {
-                        Text(
-                            text = "Loading…",
-                            modifier = Modifier.padding(16.dp)
-                        )
+                        AppScaffold { innerPadding ->
+                            ScreenContainer(
+                                modifier = Modifier.padding(innerPadding)
+                            ) {
+                                Text("Loading…")
+                            }
+                        }
                     }
                     !token.isNullOrBlank() -> {
                         UsersScreen(authViewModel = authViewModel)
