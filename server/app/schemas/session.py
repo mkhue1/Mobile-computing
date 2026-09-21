@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr
-from app.models.gaming_session import SessionType, SessionVisibility, SessionStatus
+from app.models.gaming_session import InviteStatus, SessionType, SessionVisibility, SessionStatus
 
 class SessionCreate(BaseModel):
     organiser_id: UUID
@@ -21,7 +21,6 @@ class SessionCreate(BaseModel):
 
     location_name: str | None
     player_limit: int | None
-
 
 class SessionResponse(BaseModel):
     id: UUID
@@ -46,3 +45,42 @@ class SessionResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class InviteCreate(BaseModel):
+    id: UUID
+    session_id: UUID
+    sender_id: UUID
+    receiver_id: UUID
+
+class InviteCreateResponse(BaseModel):
+    id: UUID
+    session_id: UUID
+    sender_id: UUID
+    receiver_id: UUID
+    status: InviteStatus
+    created_at: datetime
+    responded_at: datetime | None
+
+class InviteAccept(BaseModel):
+    invite_id: UUID
+    session_id: UUID
+    accepter_id: UUID
+
+# Not super sure how to use pydantic for basic success messages
+class InviteAcceptResponse(BaseModel):
+    status: bool
+    message: str
+    id: UUID
+    
+class InviteDecline(BaseModel):
+    invite_id: UUID
+    accepter_id: UUID
+
+class InviteDeclineResponse(BaseModel):
+    status: bool
+    message: str
+    id: UUID
+
+class ParticipantCreate(BaseModel):
+    session_id: UUID
+    user_id: UUID
