@@ -20,6 +20,7 @@ from app.schemas.friendship import (
     FriendshipResponse,
 )
 from app.schemas.user import UserResponse
+from app.security import get_current_user
 
 
 router = APIRouter(
@@ -43,11 +44,10 @@ def _require_user(db: Session, user_id: UUID) -> User:
     response_model=list[UserResponse],
 )
 def list_friends(
-    user_id: UUID = Query(..., description="Acting user id"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
-    friend_ids = list_friend_ids(db, user_id)
+    friend_ids = list_friend_ids(db, current_user.id)
     if not friend_ids:
         return []
 
@@ -62,19 +62,18 @@ def list_friends(
 )
 def send_friend_request(
     body: FriendRequestCreate,
-    user_id: UUID = Query(..., description="Acting user id (sender)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
     _require_user(db, body.receiver_id)
 
-    if user_id == body.receiver_id:
+    if current_user.id == body.receiver_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot send a friend request to yourself",
         )
 
-    if are_friends(db, user_id, body.receiver_id):
+    if are_friends(db, current_user.id, body.receiver_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Users are already friends",
@@ -82,7 +81,7 @@ def send_friend_request(
 
     existing = db.scalars(
         select(FriendRequest).where(
-            FriendRequest.sender_id == user_id,
+            FriendRequest.sender_id == current_user.id,
             FriendRequest.receiver_id == body.receiver_id,
         )
     ).first()
@@ -95,7 +94,7 @@ def send_friend_request(
     reverse = db.scalars(
         select(FriendRequest).where(
             FriendRequest.sender_id == body.receiver_id,
-            FriendRequest.receiver_id == user_id,
+            FriendRequest.receiver_id == current_user.id,
         )
     ).first()
     if reverse is not None:
@@ -105,7 +104,7 @@ def send_friend_request(
         )
 
     request = FriendRequest(
-        sender_id=user_id,
+        sender_id=current_user.id,
         receiver_id=body.receiver_id,
     )
     db.add(request)
@@ -119,29 +118,27 @@ def send_friend_request(
     response_model=list[FriendRequestResponse],
 )
 def list_friend_requests(
-    user_id: UUID = Query(..., description="Acting user id"),
     direction: str = Query(
         "incoming",
         pattern="^(incoming|outgoing|all)$",
         description="incoming (default), outgoing, or all",
     ),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
-
     if direction == "incoming":
         statement = select(FriendRequest).where(
-            FriendRequest.receiver_id == user_id
+            FriendRequest.receiver_id == current_user.id
         )
     elif direction == "outgoing":
         statement = select(FriendRequest).where(
-            FriendRequest.sender_id == user_id
+            FriendRequest.sender_id == current_user.id
         )
     else:
         statement = select(FriendRequest).where(
             or_(
-                FriendRequest.receiver_id == user_id,
-                FriendRequest.sender_id == user_id,
+                FriendRequest.receiver_id == current_user.id,
+                FriendRequest.sender_id == current_user.id,
             )
         )
 
@@ -154,11 +151,9 @@ def list_friend_requests(
 )
 def accept_friend_request(
     request_id: UUID,
-    user_id: UUID = Query(..., description="Acting user id (receiver)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
-
     request = db.get(FriendRequest, request_id)
     if request is None:
         raise HTTPException(
@@ -166,7 +161,7 @@ def accept_friend_request(
             detail="Friend request not found",
         )
 
-    if request.receiver_id != user_id:
+    if request.receiver_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the receiver can accept this friend request",
@@ -211,11 +206,9 @@ def accept_friend_request(
 )
 def decline_friend_request(
     request_id: UUID,
-    user_id: UUID = Query(..., description="Acting user id (receiver)"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
-
     request = db.get(FriendRequest, request_id)
     if request is None:
         raise HTTPException(
@@ -223,7 +216,7 @@ def decline_friend_request(
             detail="Friend request not found",
         )
 
-    if request.receiver_id != user_id:
+    if request.receiver_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the receiver can decline this friend request",
@@ -240,13 +233,12 @@ def decline_friend_request(
 )
 def remove_friend(
     friend_id: UUID,
-    user_id: UUID = Query(..., description="Acting user id"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, user_id)
     _require_user(db, friend_id)
 
-    friendship = get_friendship(db, user_id, friend_id)
+    friendship = get_friendship(db, current_user.id, friend_id)
     if friendship is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
