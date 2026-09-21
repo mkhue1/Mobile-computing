@@ -1,6 +1,8 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from server.app.models.user import User
+from server.app.security import get_current_user
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
@@ -22,8 +24,10 @@ router = APIRouter(
 )
 def get_sessions(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+
 ):
-    statement = select(GamingSession)
+    statement = select(GamingSession).where(GamingSession.organiser_id == current_user.id)
 
     return db.scalars(statement).all()
 
@@ -36,10 +40,11 @@ def get_sessions(
 )
 def create_session(
     session: SessionCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     new_session = GamingSession(
-        organiser_id=session.organiser_id, # when authentication is added, should be updated to get the current users ID so this is not provided by the user
+        organiser_id=current_user.id,
         game_id=session.game_id,
         group_id=session.group_id,
         title=session.title,
@@ -56,7 +61,7 @@ def create_session(
 
     db.add(new_session)
     db.flush()
-    db.add(SessionParticipant(session_id = new_session.id, user_id = session.organiser_id))
+    db.add(SessionParticipant(session_id = new_session.id, user_id = current_user.id))
     db.commit()
     db.refresh(new_session)
 
@@ -71,6 +76,8 @@ def create_session(
 def create_invite(
     invite: InviteCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+
 ):
 
     existing = db.scalars(
@@ -85,7 +92,7 @@ def create_invite(
     
     new_invite = SessionInvite(
         session_id=invite.session_id,
-        sender_id=invite.sender_id, 
+        sender_id=current_user.id, 
         receiver_id=invite.receiver_id, # when authentication is added, should be updated to get the current users ID so this is not provided by the user
     )
 
@@ -96,15 +103,21 @@ def create_invite(
     return new_invite
 
 
-#TODO use authentication to confirm the requester is the user whose invites are being fetched
 @router.get(
     "/invites/{user_id}",
     response_model=list[InviteResponse],
 )
 def get_invites(
     user_id: UUID,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if current_user.user_id is not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"User is trying to view another users invites",
+        )
+
     statement = (
         select(SessionInvite)
         .where(SessionInvite.receiver_id == user_id)
@@ -121,6 +134,7 @@ def get_invites(
 )
 def accept_invite(
     invite: InviteAccept,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):  
     session_invite = db.get(SessionInvite, invite.invite_id)
@@ -129,7 +143,14 @@ def accept_invite(
         or session_invite.session_id != invite.session_id
         or session_invite.receiver_id != invite.receiver_id
     ):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invite not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invite not found")\
+
+    if current_user.id is not invite.receiver_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"User is not the receipient of the invite",
+        )
+    
     if session_invite.status != InviteStatus.PENDING:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Invite has already been responded to")
     
@@ -155,12 +176,18 @@ def accept_invite(
         response_model=InviteAcitionResponse
     )
 def decline_invite(
-    invite: InviteDecline, 
+    invite: InviteDecline,
+    current_user: User = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
     session_invite = db.get(SessionInvite, invite.invite_id)
     if session_invite is None or session_invite.receiver_id != invite.receiver_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invite not found")
+    if current_user.id is not invite.receiver_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"User is not the receipient of the invite",
+        )
     if session_invite.status != InviteStatus.PENDING:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Invite has already been responded to")
 
