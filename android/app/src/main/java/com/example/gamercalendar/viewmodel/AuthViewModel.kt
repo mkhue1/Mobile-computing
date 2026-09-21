@@ -17,7 +17,7 @@ import retrofit2.HttpException
 data class AuthUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
-    val isCheckingSession: Boolean = true
+    val isCheckingSession: Boolean = false
 )
 
 class AuthViewModel(
@@ -25,7 +25,7 @@ class AuthViewModel(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(AuthUiState())
+    private val _uiState = MutableStateFlow(AuthUiState(isCheckingSession = true))
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     val accessToken: StateFlow<String?> = sessionManager.accessToken
@@ -65,12 +65,12 @@ class AuthViewModel(
             return
         }
         viewModelScope.launch {
-            _uiState.value = AuthUiState(isLoading = true)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 authRepository.login(identifier.trim(), password)
-                _uiState.value = AuthUiState(isLoading = false)
+                _uiState.value = _uiState.value.copy(isLoading = false)
             } catch (e: Exception) {
-                _uiState.value = AuthUiState(
+                _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = httpErrorMessage(e, "Login failed")
                 )
@@ -103,12 +103,12 @@ class AuthViewModel(
         }
 
         viewModelScope.launch {
-            _uiState.value = AuthUiState(isLoading = true)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 authRepository.register(trimmedEmail, trimmedUsername, password)
-                _uiState.value = AuthUiState(isLoading = false)
+                _uiState.value = _uiState.value.copy(isLoading = false)
             } catch (e: Exception) {
-                _uiState.value = AuthUiState(
+                _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = httpErrorMessage(e, "Sign up failed")
                 )
@@ -119,7 +119,7 @@ class AuthViewModel(
     fun logout() {
         viewModelScope.launch {
             authRepository.logout()
-            _uiState.value = AuthUiState(isCheckingSession = false)
+            _uiState.value = AuthUiState()
         }
     }
 
