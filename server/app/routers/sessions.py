@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionType, SessionVisibility, InviteStatus
-from app.schemas.session import InviteAccept, InviteAcceptResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteDeclineResponse, SessionResponse, SessionCreate
+from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, SessionResponse, SessionCreate
 
 
 
@@ -21,7 +23,7 @@ router = APIRouter(
 def get_sessions(
     db: Session = Depends(get_db),
 ):
-    statement = select(SessionResponse)
+    statement = select(GamingSession)
 
     return db.scalars(statement).all()
 
@@ -29,6 +31,8 @@ def get_sessions(
 @router.post(
     "/create",
     response_model=SessionResponse,
+    status_code=status.HTTP_201_CREATED,
+
 )
 def create_session(
     session: SessionCreate,
@@ -46,6 +50,7 @@ def create_session(
         visibility=session.visibility,
         status=session.status,
         location_name=session.location_name,
+        player_count=1,
         player_limit=session.player_limit,
     )
 
@@ -56,13 +61,26 @@ def create_session(
     return new_session
 
 @router.post(
-    "/{session_id}/invite",
+    "/{session_id}/invite", # session id is sent in InviteCreate anyway so doesnt need to be in route - is there a better route name to use?
     response_model=InviteCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+
 )
 def create_invite(
     invite: InviteCreate,
     db: Session = Depends(get_db),
 ):
+
+    existing = db.scalars(
+            select(SessionInvite).where(SessionInvite.session_id == invite.session_id, SessionInvite.receiver_id == invite.receiver_id)
+        ).first()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Invitee {invite.receiver_id} already invited to session",
+        )
+    
+    
     new_invite = SessionInvite(
         session_id=invite.session_id,
         sender_id=invite.sender_id, 
@@ -73,43 +91,79 @@ def create_invite(
     db.commit()
     db.refresh(new_invite)
 
-    return InviteCreateResponse(**new_invite)
+    return new_invite
+
+
+#TODO use authentication to confirm the requester is the user whose invites are being fetched
+@router.get(
+    "/invites/{user_id}",
+    response_model=list[InviteResponse],
+)
+def get_invites(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+):
+    statement = (
+        select(SessionInvite)
+        .where(SessionInvite.receiver_id == user_id)
+        .order_by(SessionInvite.created_at.desc())
+    )
+
+    return db.scalars(statement).all()
 
 
 #TODO use authentication to confirm making the request is the one invited
 @router.post(
     "/{session_id}/accept",
-    response_model=InviteAcceptResponse,
+    response_model=InviteAcitionResponse,
 )
 def accept_invite(
     invite: InviteAccept,
     db: Session = Depends(get_db),
-):
+):  
+    session_invite = db.get(SessionInvite, invite.invite_id)
+    if (
+        session_invite is None
+        or session_invite.session_id != invite.session_id
+        or session_invite.receiver_id != invite.receiver_id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invite not found")
+    if session_invite.status != InviteStatus.PENDING:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Invite has already been responded to")
+    
+    gaming_session = db.scalars(
+            select(GamingSession).where(GamingSession.id == invite.session_id).with_for_update()
+        ).one_or_none()
+    
+    if gaming_session.player_limit is not None and gaming_session.player_count >= gaming_session.player_limit:
+        raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Session {invite.session_id} is full",
+                )
+    
     session_participant = SessionParticipant(session_id = invite.session_id, user_id = invite.receiver_id)
-
-    result = db.execute(
-            select(GamingSession.player_count, GamingSession.player_limit).where(GamingSession.id == invite.session_id).with_for_update(read=True).first()
-        )
-    if result.player_count < result.player_limit:
-        session_invite = db.get(SessionInvite, invite.invite_id)
-        session_invite.status = InviteStatus("accepted")
-        db.add(session_participant)
-        db.update(session_invite)
-        db.commit()
-        return InviteAcceptResponse(status=True, message="invited accepted", id=invite.session_id)
-    else:
-        return InviteAcceptResponse(status=False, message="failed to accept invite", id=invite.session_id)
+    session_invite.status = InviteStatus.ACCEPTED
+    gaming_session.player_count += 1
+    db.add(session_participant)
+    db.commit()
+    return InviteAcitionResponse(status=True, message="invited accepted", id=invite.session_id)
 
 @router.post(
-    "/{session_id}/decline",
-    response_model=InviteAcceptResponse,
-)
+        "/{session_id}/decline", 
+        response_model=InviteAcitionResponse
+    )
 def decline_invite(
-    invite: InviteDecline,
-    db: Session = Depends(get_db),
+    invite: InviteDecline, 
+    db: Session = Depends(get_db)
 ):
     session_invite = db.get(SessionInvite, invite.invite_id)
-    session_invite.status = InviteStatus("declined")
-    db.update(session_invite)
+    if session_invite is None or session_invite.receiver_id != invite.receiver_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Invite not found")
+    if session_invite.status != InviteStatus.PENDING:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Invite has already been responded to")
+
+    session_invite.status = InviteStatus.DECLINED
+    session_invite.responded_at = func.now()
     db.commit()
-    return InviteDeclineResponse(status=True, message="invited declined", id=invite.session_id)
+
+    return InviteAcitionResponse(status=True, message="invite declined", id=session_invite.session_id)

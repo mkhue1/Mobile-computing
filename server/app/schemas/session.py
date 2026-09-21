@@ -7,10 +7,10 @@ from app.models.gaming_session import InviteStatus, SessionType, SessionVisibili
 class SessionCreate(BaseModel):
     organiser_id: UUID
     game_id: UUID
-    group_id: UUID | None
+    group_id: UUID | None = None
 
-    title: str | None
-    description: str | None
+    title: str | None = None
+    description: str | None = None
 
     start_at: datetime
     end_at: datetime
@@ -19,17 +19,17 @@ class SessionCreate(BaseModel):
     visibility: SessionVisibility
     status:   SessionStatus
 
-    location_name: str | None
-    player_limit: int | None
+    location_name: str | None = None
+    player_limit: int | None = None
 
 class SessionResponse(BaseModel):
     id: UUID
     organiser_id: UUID
     game_id: UUID
-    group_id: UUID | None
+    group_id: UUID | None = None
 
-    title: str | None
-    description: str | None
+    title: str | None = None
+    description: str | None = None
 
     start_at: datetime
     end_at: datetime
@@ -38,8 +38,9 @@ class SessionResponse(BaseModel):
     visibility: SessionVisibility
     status:   SessionStatus
 
-    location_name: str | None
-    player_limit: int | None
+    location_name: str | None = None
+    player_limit: int | None = None
+    player_count: int
 
     created_at: datetime
     updated_at: datetime
@@ -47,7 +48,6 @@ class SessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class InviteCreate(BaseModel):
-    id: UUID
     session_id: UUID
     sender_id: UUID
     receiver_id: UUID
@@ -61,22 +61,30 @@ class InviteCreateResponse(BaseModel):
     created_at: datetime
     responded_at: datetime | None
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InviteResponse(BaseModel):
+    id: UUID
+    session_id: UUID
+    sender_id: UUID
+    receiver_id: UUID
+    status: InviteStatus
+    created_at: datetime
+    responded_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 class InviteAccept(BaseModel):
     invite_id: UUID
     session_id: UUID
-    accepter_id: UUID
+    receiver_id: UUID
 
-# Not super sure how to use pydantic for basic success messages
-class InviteAcceptResponse(BaseModel):
-    status: bool
-    message: str
-    id: UUID
-    
 class InviteDecline(BaseModel):
     invite_id: UUID
-    accepter_id: UUID
+    receiver_id: UUID
 
-class InviteDeclineResponse(BaseModel):
+class InviteAcitionResponse(BaseModel):
     status: bool
     message: str
     id: UUID
