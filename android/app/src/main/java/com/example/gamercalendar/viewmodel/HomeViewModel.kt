@@ -32,7 +32,7 @@ class HomeViewModel : ViewModel() {
 
     private val repository = SessionRepository()
 
-    private val _uiState = MutableStateFlow(HomeUiState())
+    private val _uiState = MutableStateFlow(HomeUiState(isLoading = true))
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     /** Background load, e.g. when the screen is shown. */

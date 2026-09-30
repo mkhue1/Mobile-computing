@@ -96,6 +96,12 @@ fun AppNavigation(
                 fadeOut(
                     animationSpec = tween(30)
                 )
+            },
+            predictivePopEnterTransition = {
+                fadeIn()
+            },
+            predictivePopExitTransition = {
+                fadeOut()
             }
         ) {
             composable(Routes.ITEM_1) {

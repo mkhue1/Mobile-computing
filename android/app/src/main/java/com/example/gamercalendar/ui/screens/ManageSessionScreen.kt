@@ -90,12 +90,6 @@ fun ManageSessionScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
-        Text(
-            text = if (uiState.isOrganiser) "Manage session" else "Session details",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
         when {
             session == null && uiState.isLoading -> LoadingIndicator()
 
@@ -105,6 +99,12 @@ fun ManageSessionScreen(
             }
 
             else -> {
+                Text(
+                    text = if (uiState.isOrganiser) "Manage session" else "Session details",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+
                 SessionCard(
                     session = session,
                     gameName = uiState.gameName,

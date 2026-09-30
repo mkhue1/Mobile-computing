@@ -68,7 +68,9 @@ class ManageSessionViewModel(
     private val userRepository = UserRepository()
     private val friendRepository = FriendRepository()
 
-    private val _uiState = MutableStateFlow(ManageSessionUiState())
+    private val _uiState = MutableStateFlow(
+        ManageSessionUiState(isLoading = true, isLoadingParticipants = true)
+    )
     val uiState: StateFlow<ManageSessionUiState> = _uiState.asStateFlow()
 
     fun load() {
