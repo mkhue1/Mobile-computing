@@ -15,7 +15,7 @@ data class BottomNavItem(
 val bottomNavItems = listOf(
     BottomNavItem(
         route = Routes.ITEM_1,
-        label = "Item 1",
+        label = "Home",
         icon = Icons.Default.Home
     ),
     BottomNavItem(

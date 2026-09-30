@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.gamercalendar.data.repository.AuthRepository
 import com.example.gamercalendar.data.session.SessionManager
 import com.example.gamercalendar.util.AuthValidation
+import com.example.gamercalendar.util.apiErrorDetail
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -129,17 +130,7 @@ class AuthViewModel(
 
     private fun httpErrorMessage(e: Exception, fallback: String): String {
         if (e is HttpException) {
-            val body = try {
-                e.response()?.errorBody()?.string()
-            } catch (_: Exception) {
-                null
-            }
-            if (!body.isNullOrBlank()) {
-                val detail = Regex("\"detail\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
-                if (!detail.isNullOrBlank()) return detail
-                val listDetail = Regex("\"msg\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
-                if (!listDetail.isNullOrBlank()) return listDetail
-            }
+            apiErrorDetail(e)?.let { return it }
             return when (e.code()) {
                 401 -> "Invalid credentials"
                 409 -> "Email or username already registered"

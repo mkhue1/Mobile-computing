@@ -13,6 +13,18 @@ router = APIRouter(
 )
 
 
+@router.get(
+    "/",
+    response_model=list[GameResponse],
+)
+def get_games(
+    db: Session = Depends(get_db),
+):
+    statement = select(Game).order_by(Game.name)
+
+    return db.scalars(statement).all()
+
+
 @router.post(
     "/",
     response_model=GameResponse,

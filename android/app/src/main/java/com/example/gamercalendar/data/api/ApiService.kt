@@ -1,9 +1,13 @@
 package com.example.gamercalendar.data.api
 
+import com.example.gamercalendar.data.model.Game
+import com.example.gamercalendar.data.model.GamingSession
 import com.example.gamercalendar.data.model.LoginRequest
+import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.TokenResponse
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserCreate
+import com.example.gamercalendar.data.model.UserGroup
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -25,4 +29,18 @@ interface ApiService {
 
     @GET("auth/me")
     suspend fun me(): User
+
+    @GET("games/")
+    suspend fun getGames(): List<Game>
+
+    @GET("groups/")
+    suspend fun getGroups(): List<UserGroup>
+
+    @GET("sessions/")
+    suspend fun getSessions(): List<GamingSession>
+
+    @POST("sessions/create")
+    suspend fun createSession(
+        @Body session: SessionCreate
+    ): GamingSession
 }

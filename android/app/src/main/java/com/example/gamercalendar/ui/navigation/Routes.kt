@@ -6,4 +6,5 @@ object Routes {
     const val USERS = "users"
     const val ITEM_4 = "item4"
     const val ITEM_5 = "item5"
+    const val CREATE_SESSION = "sessions/create"
 }

@@ -19,8 +19,10 @@ import com.example.gamercalendar.ui.components.app.AppBottomBar
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.app.AppTopBar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
-import com.example.gamercalendar.ui.screens.UsersScreen
 import com.example.gamercalendar.ui.screens.CardTestScreen
+import com.example.gamercalendar.ui.screens.CreateSessionScreen
+import com.example.gamercalendar.ui.screens.HomeScreen
+import com.example.gamercalendar.ui.screens.UsersScreen
 import com.example.gamercalendar.viewmodel.AuthViewModel
 
 
@@ -90,8 +92,17 @@ fun AppNavigation(
             }
         ) {
             composable(Routes.ITEM_1) {
-                PlaceholderScreen(
-                    text = "Item 1"
+                HomeScreen(
+                    onCreateSessionClick = {
+                        navController.navigate(Routes.CREATE_SESSION)
+                    }
+                )
+            }
+
+            composable(Routes.CREATE_SESSION) {
+                CreateSessionScreen(
+                    onSessionCreated = { navController.popBackStack() },
+                    onCancel = { navController.popBackStack() }
                 )
             }
 
