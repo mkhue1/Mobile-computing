@@ -25,6 +25,7 @@ import com.example.gamercalendar.ui.screens.AddFriendScreen
 import com.example.gamercalendar.ui.screens.CardTestScreen
 import com.example.gamercalendar.ui.screens.CreateSessionScreen
 import com.example.gamercalendar.ui.screens.FriendsHubScreen
+import com.example.gamercalendar.ui.screens.GroupDetailScreen
 import com.example.gamercalendar.ui.screens.HomeScreen
 import com.example.gamercalendar.ui.screens.ManageSessionScreen
 import com.example.gamercalendar.ui.screens.UsersScreen
@@ -165,6 +166,9 @@ fun AppNavigation(
                 FriendsHubScreen(
                     onAddFriendClick = {
                         navController.navigate(Routes.ADD_FRIEND)
+                    },
+                    onGroupClick = { groupId ->
+                        navController.navigate(Routes.groupDetail(groupId))
                     }
                 )
             }
@@ -172,6 +176,15 @@ fun AppNavigation(
             composable(Routes.ADD_FRIEND) {
                 AddFriendScreen(
                     onDone = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Routes.GROUP_DETAIL,
+                arguments = listOf(navArgument(Routes.ARG_GROUP_ID) { type = NavType.StringType })
+            ) {
+                GroupDetailScreen(
+                    onLeft = { navController.popBackStack() }
                 )
             }
         }

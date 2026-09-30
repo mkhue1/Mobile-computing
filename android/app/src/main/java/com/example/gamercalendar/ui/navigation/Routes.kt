@@ -14,6 +14,10 @@ object Routes {
     const val MANAGE_SESSION = "session/{$ARG_SESSION_ID}"
     const val EDIT_SESSION = "session/{$ARG_SESSION_ID}/edit"
 
+    const val ARG_GROUP_ID = "groupId"
+    const val GROUP_DETAIL = "groups/{$ARG_GROUP_ID}"
+
     fun manageSession(sessionId: String) = "session/$sessionId"
     fun editSession(sessionId: String) = "session/$sessionId/edit"
+    fun groupDetail(groupId: String) = "groups/$groupId"
 }

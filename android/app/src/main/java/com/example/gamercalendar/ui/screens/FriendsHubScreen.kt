@@ -25,8 +25,10 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.User
+import com.example.gamercalendar.data.model.UserGroup
 import com.example.gamercalendar.ui.components.buttons.DefaultButton
 import com.example.gamercalendar.ui.components.cards.AppCard
+import com.example.gamercalendar.ui.components.dialogs.GroupNameDialog
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
@@ -41,12 +43,14 @@ private val TAB_TITLES = listOf("Friends", "Requests", "Groups")
 @Composable
 fun FriendsHubScreen(
     onAddFriendClick: () -> Unit = {},
+    onGroupClick: (String) -> Unit = {},
     viewModel: FriendsHubViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     var selectedTab by remember { mutableStateOf(0) }
     var pendingRemoveFriendId by remember { mutableStateOf<String?>(null) }
+    var showCreateGroupDialog by remember { mutableStateOf(false) }
 
     // Runs each time the hub is shown, so leaving and coming back refreshes the list.
     LaunchedEffect(Unit) {
@@ -102,10 +106,21 @@ fun FriendsHubScreen(
                     onDecline = viewModel::declineRequest
                 )
 
-                else -> EmptyState(
-                    title = "Groups coming soon",
-                    message = "Your groups will show up here."
-                )
+                else -> {
+                    DefaultButton(
+                        text = "Create group",
+                        onClick = { showCreateGroupDialog = true },
+                        enabled = !uiState.isWorking
+                    )
+
+                    GroupsTab(
+                        groups = uiState.groups,
+                        isLoading = uiState.isLoading,
+                        error = uiState.error,
+                        actionError = uiState.actionError,
+                        onGroupClick = onGroupClick
+                    )
+                }
             }
         }
     }
@@ -121,6 +136,18 @@ fun FriendsHubScreen(
                 viewModel.removeFriend(friendId)
             },
             onDismiss = { pendingRemoveFriendId = null }
+        )
+    }
+
+    if (showCreateGroupDialog) {
+        GroupNameDialog(
+            title = "Create group",
+            confirmLabel = "Create",
+            onConfirm = { name ->
+                showCreateGroupDialog = false
+                viewModel.createGroup(name)
+            },
+            onDismiss = { showCreateGroupDialog = false }
         )
     }
 }
@@ -295,6 +322,49 @@ private fun OutgoingRequestRow(
 
             Tag(text = "Pending")
         }
+    }
+}
+
+@Composable
+private fun GroupsTab(
+    groups: List<UserGroup>,
+    isLoading: Boolean,
+    error: String?,
+    actionError: String?,
+    onGroupClick: (String) -> Unit
+) {
+    error?.let { ErrorText(text = it) }
+    actionError?.let { ErrorText(text = it) }
+
+    when {
+        isLoading && groups.isEmpty() -> LoadingIndicator()
+
+        groups.isEmpty() -> {
+            if (error == null) {
+                EmptyState(
+                    title = "No groups yet",
+                    message = "Create a group to start scheduling sessions together."
+                )
+            }
+        }
+
+        else -> groups.forEach { group ->
+            GroupRow(group = group, onClick = { onGroupClick(group.id) })
+        }
+    }
+}
+
+@Composable
+private fun GroupRow(
+    group: UserGroup,
+    onClick: () -> Unit
+) {
+    AppCard(onClick = onClick) {
+        Text(
+            text = group.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
