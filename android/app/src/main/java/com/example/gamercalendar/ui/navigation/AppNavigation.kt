@@ -21,6 +21,7 @@ import com.example.gamercalendar.ui.components.app.AppBottomBar
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.app.AppTopBar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
+import com.example.gamercalendar.ui.screens.AddFriendScreen
 import com.example.gamercalendar.ui.screens.CardTestScreen
 import com.example.gamercalendar.ui.screens.CreateSessionScreen
 import com.example.gamercalendar.ui.screens.FriendsHubScreen
@@ -161,7 +162,17 @@ fun AppNavigation(
             }
 
             composable(Routes.FRIENDS_HUB) {
-                FriendsHubScreen()
+                FriendsHubScreen(
+                    onAddFriendClick = {
+                        navController.navigate(Routes.ADD_FRIEND)
+                    }
+                )
+            }
+
+            composable(Routes.ADD_FRIEND) {
+                AddFriendScreen(
+                    onDone = { navController.popBackStack() }
+                )
             }
         }
     }

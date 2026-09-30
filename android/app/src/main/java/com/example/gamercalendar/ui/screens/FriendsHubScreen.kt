@@ -25,11 +25,14 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.User
+import com.example.gamercalendar.ui.components.buttons.DefaultButton
 import com.example.gamercalendar.ui.components.cards.AppCard
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
+import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
+import com.example.gamercalendar.viewmodel.FriendRequestUi
 import com.example.gamercalendar.viewmodel.FriendsHubViewModel
 
 private val TAB_TITLES = listOf("Friends", "Requests", "Groups")
@@ -37,6 +40,7 @@ private val TAB_TITLES = listOf("Friends", "Requests", "Groups")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FriendsHubScreen(
+    onAddFriendClick: () -> Unit = {},
     viewModel: FriendsHubViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -76,17 +80,26 @@ fun FriendsHubScreen(
             }
 
             when (selectedTab) {
-                0 -> FriendsTab(
-                    friends = uiState.friends,
+                0 -> {
+                    DefaultButton(text = "Add friend", onClick = onAddFriendClick)
+
+                    FriendsTab(
+                        friends = uiState.friends,
+                        isLoading = uiState.isLoading,
+                        error = uiState.error,
+                        actionError = uiState.actionError,
+                        onRemoveClick = { friendId -> pendingRemoveFriendId = friendId }
+                    )
+                }
+
+                1 -> RequestsTab(
+                    incomingRequests = uiState.incomingRequests,
+                    outgoingRequests = uiState.outgoingRequests,
                     isLoading = uiState.isLoading,
                     error = uiState.error,
                     actionError = uiState.actionError,
-                    onRemoveClick = { friendId -> pendingRemoveFriendId = friendId }
-                )
-
-                1 -> EmptyState(
-                    title = "Requests coming soon",
-                    message = "Friend requests will show up here."
+                    onAccept = viewModel::acceptRequest,
+                    onDecline = viewModel::declineRequest
                 )
 
                 else -> EmptyState(
@@ -161,6 +174,126 @@ private fun FriendRow(
             TextButton(onClick = onRemoveClick) {
                 Text(text = "Remove", color = MaterialTheme.colorScheme.error)
             }
+        }
+    }
+}
+
+@Composable
+private fun RequestsTab(
+    incomingRequests: List<FriendRequestUi>,
+    outgoingRequests: List<FriendRequestUi>,
+    isLoading: Boolean,
+    error: String?,
+    actionError: String?,
+    onAccept: (String) -> Unit,
+    onDecline: (String) -> Unit
+) {
+    error?.let { ErrorText(text = it) }
+    actionError?.let { ErrorText(text = it) }
+
+    if (isLoading && incomingRequests.isEmpty() && outgoingRequests.isEmpty()) {
+        LoadingIndicator()
+        return
+    }
+
+    if (incomingRequests.isEmpty() && outgoingRequests.isEmpty()) {
+        if (error == null) {
+            EmptyState(
+                title = "No requests",
+                message = "Friend requests you send or receive will show up here."
+            )
+        }
+        return
+    }
+
+    Text(
+        text = "Incoming",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onBackground
+    )
+
+    if (incomingRequests.isEmpty()) {
+        Text(
+            text = "No incoming requests",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    } else {
+        incomingRequests.forEach { requestUi ->
+            IncomingRequestRow(
+                requestUi = requestUi,
+                onAccept = { onAccept(requestUi.request.id) },
+                onDecline = { onDecline(requestUi.request.id) }
+            )
+        }
+    }
+
+    Text(
+        text = "Outgoing",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onBackground
+    )
+
+    if (outgoingRequests.isEmpty()) {
+        Text(
+            text = "No outgoing requests",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    } else {
+        outgoingRequests.forEach { requestUi ->
+            OutgoingRequestRow(requestUi = requestUi)
+        }
+    }
+}
+
+@Composable
+private fun IncomingRequestRow(
+    requestUi: FriendRequestUi,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    AppCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = requestUi.otherUser?.username ?: "Unknown user",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Row {
+                TextButton(onClick = onAccept) {
+                    Text(text = "Accept", color = MaterialTheme.colorScheme.primary)
+                }
+                TextButton(onClick = onDecline) {
+                    Text(text = "Decline", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OutgoingRequestRow(
+    requestUi: FriendRequestUi
+) {
+    AppCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = requestUi.otherUser?.username ?: "Unknown user",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Tag(text = "Pending")
         }
     }
 }

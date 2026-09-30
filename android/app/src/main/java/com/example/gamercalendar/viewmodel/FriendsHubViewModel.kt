@@ -2,17 +2,28 @@ package com.example.gamercalendar.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.gamercalendar.data.model.FriendRequestResponse
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.repository.FriendRepository
+import com.example.gamercalendar.data.repository.UserRepository
 import com.example.gamercalendar.util.apiErrorDetail
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+data class FriendRequestUi(
+    val request: FriendRequestResponse,
+    val otherUser: User?
+)
+
 data class FriendsHubUiState(
     val friends: List<User> = emptyList(),
+    val incomingRequests: List<FriendRequestUi> = emptyList(),
+    val outgoingRequests: List<FriendRequestUi> = emptyList(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val error: String? = null,
@@ -23,6 +34,7 @@ data class FriendsHubUiState(
 class FriendsHubViewModel : ViewModel() {
 
     private val repository = FriendRepository()
+    private val userRepository = UserRepository()
 
     private val _uiState = MutableStateFlow(FriendsHubUiState(isLoading = true))
     val uiState: StateFlow<FriendsHubUiState> = _uiState.asStateFlow()
@@ -40,9 +52,30 @@ class FriendsHubViewModel : ViewModel() {
                 else it.copy(isLoading = true, error = null)
             }
             try {
-                val friends = repository.getFriends()
-                _uiState.update {
-                    it.copy(friends = friends, isLoading = false, isRefreshing = false)
+                coroutineScope {
+                    val friendsDeferred = async { repository.getFriends() }
+                    val incomingDeferred = async { repository.getFriendRequests("incoming") }
+                    val outgoingDeferred = async { repository.getFriendRequests("outgoing") }
+                    val usersDeferred = async { userRepository.getUsers() }
+
+                    val friends = friendsDeferred.await()
+                    val incoming = incomingDeferred.await()
+                    val outgoing = outgoingDeferred.await()
+                    val usersById = usersDeferred.await().associateBy { it.id }
+
+                    _uiState.update {
+                        it.copy(
+                            friends = friends,
+                            incomingRequests = incoming.map { req ->
+                                FriendRequestUi(request = req, otherUser = usersById[req.sender_id])
+                            },
+                            outgoingRequests = outgoing.map { req ->
+                                FriendRequestUi(request = req, otherUser = usersById[req.receiver_id])
+                            },
+                            isLoading = false,
+                            isRefreshing = false
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.update {
@@ -68,6 +101,42 @@ class FriendsHubViewModel : ViewModel() {
                     it.copy(
                         isWorking = false,
                         actionError = apiErrorDetail(e) ?: e.message ?: "Couldn't remove friend"
+                    )
+                }
+            }
+        }
+    }
+
+    fun acceptRequest(requestId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, actionError = null) }
+            try {
+                repository.acceptFriendRequest(requestId)
+                load(isRefresh = true)
+                _uiState.update { it.copy(isWorking = false) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isWorking = false,
+                        actionError = apiErrorDetail(e) ?: e.message ?: "Couldn't accept request"
+                    )
+                }
+            }
+        }
+    }
+
+    fun declineRequest(requestId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, actionError = null) }
+            try {
+                repository.declineFriendRequest(requestId)
+                load(isRefresh = true)
+                _uiState.update { it.copy(isWorking = false) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isWorking = false,
+                        actionError = apiErrorDetail(e) ?: e.message ?: "Couldn't decline request"
                     )
                 }
             }
