@@ -23,6 +23,7 @@ import com.example.gamercalendar.ui.components.app.AppTopBar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.screens.CardTestScreen
 import com.example.gamercalendar.ui.screens.CreateSessionScreen
+import com.example.gamercalendar.ui.screens.FriendsHubScreen
 import com.example.gamercalendar.ui.screens.HomeScreen
 import com.example.gamercalendar.ui.screens.ManageSessionScreen
 import com.example.gamercalendar.ui.screens.UsersScreen
@@ -42,14 +43,7 @@ fun AppNavigation(
         topBar = {
             AppTopBar(
                 onProfileClick = {
-                    navController.navigate(Routes.ITEM_5) {
-                        launchSingleTop = true
-                        restoreState = true
-
-                        popUpTo(Routes.ITEM_1) {
-                            saveState = true
-                        }
-                    }
+                    navController.navigate(Routes.FRIENDS_HUB)
                 }
             )
         },
@@ -164,6 +158,10 @@ fun AppNavigation(
                 PlaceholderScreen(
                     text = "Item 5"
                 )
+            }
+
+            composable(Routes.FRIENDS_HUB) {
+                FriendsHubScreen()
             }
         }
     }
