@@ -5,8 +5,10 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.helpers.session import can_view_session
 from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionType, SessionVisibility, InviteStatus
 from app.models.user import User
+from app.models.user_group import UserGroup, UserGroupMember
 from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, SessionResponse, SessionCreate
 from app.security import get_current_user
 
@@ -51,7 +53,26 @@ def create_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    
+    if session.visibility == SessionVisibility.GROUP and session.group_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A group must be chosen for group visibility",
+        )
+
+    if session.group_id is not None:
+        if db.get(UserGroup, session.group_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Group {session.group_id} does not exist",
+            )
+
+        membership = db.get(UserGroupMember, (session.group_id, current_user.id))
+        if membership is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only create sessions for groups you are a member of",
+            )
+
     new_session = GamingSession(
         organiser_id=current_user.id,
         game_id=session.game_id,
@@ -222,3 +243,25 @@ def decline_invite(
     db.commit()
 
     return InviteAcitionResponse(status=True, message="invite declined", id=session_invite.session_id)
+
+
+# Declared after the fixed /sessions/... paths so they aren't captured as a session id.
+@router.get(
+    "/{session_id}",
+    response_model=SessionResponse,
+)
+def get_session(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session = db.get(GamingSession, session_id)
+
+    # 404 rather than 403 so sessions a user can't see aren't revealed to exist.
+    if session is None or not can_view_session(db, session, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} does not exist",
+        )
+
+    return session

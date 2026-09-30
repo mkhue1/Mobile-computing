@@ -11,16 +11,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.gamercalendar.ui.components.app.AppBottomBar
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.app.AppTopBar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
-import com.example.gamercalendar.ui.screens.UsersScreen
 import com.example.gamercalendar.ui.screens.CardTestScreen
+import com.example.gamercalendar.ui.screens.CreateSessionScreen
+import com.example.gamercalendar.ui.screens.HomeScreen
+import com.example.gamercalendar.ui.screens.ManageSessionScreen
+import com.example.gamercalendar.ui.screens.UsersScreen
 import com.example.gamercalendar.viewmodel.AuthViewModel
 
 
@@ -52,12 +57,16 @@ fun AppNavigation(
             AppBottomBar(
                 currentRoute = currentRoute,
                 onNavigate = { route ->
+                    // Home always resets to its root; saving/restoring state here would bring back
+                    // screens stacked on top of it, such as Create session.
+                    val isHome = route == Routes.ITEM_1
+
                     navController.navigate(route) {
                         launchSingleTop = true
-                        restoreState = true
+                        restoreState = !isHome
 
                         popUpTo(Routes.ITEM_1) {
-                            saveState = true
+                            saveState = !isHome
                         }
                     }
                 }
@@ -87,11 +96,51 @@ fun AppNavigation(
                 fadeOut(
                     animationSpec = tween(30)
                 )
+            },
+            predictivePopEnterTransition = {
+                fadeIn()
+            },
+            predictivePopExitTransition = {
+                fadeOut()
             }
         ) {
             composable(Routes.ITEM_1) {
-                PlaceholderScreen(
-                    text = "Item 1"
+                HomeScreen(
+                    onCreateSessionClick = {
+                        navController.navigate(Routes.CREATE_SESSION)
+                    },
+                    onSessionClick = { sessionId ->
+                        navController.navigate(Routes.manageSession(sessionId))
+                    }
+                )
+            }
+
+            composable(Routes.CREATE_SESSION) {
+                CreateSessionScreen(
+                    onSaved = { navController.popBackStack() },
+                    onCancel = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Routes.MANAGE_SESSION,
+                arguments = listOf(navArgument(Routes.ARG_SESSION_ID) { type = NavType.StringType })
+            ) {
+                ManageSessionScreen(
+                    onEditClick = { sessionId ->
+                        navController.navigate(Routes.editSession(sessionId))
+                    },
+                    onLeft = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Routes.EDIT_SESSION,
+                arguments = listOf(navArgument(Routes.ARG_SESSION_ID) { type = NavType.StringType })
+            ) {
+                CreateSessionScreen(
+                    onSaved = { navController.popBackStack() },
+                    onCancel = { navController.popBackStack() }
                 )
             }
 

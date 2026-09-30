@@ -8,4 +8,8 @@ class UserRepository {
     suspend fun getUsers(): List<User> {
         return ApiClient.api.getUsers()
     }
+
+    suspend fun getCurrentUser(): User {
+        return ApiClient.api.me()
+    }
 }
