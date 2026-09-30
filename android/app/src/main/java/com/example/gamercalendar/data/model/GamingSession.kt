@@ -35,6 +35,17 @@ enum class SessionStatus {
     COMPLETED
 }
 
+enum class InviteStatus {
+    @SerializedName("pending")
+    PENDING,
+
+    @SerializedName("accepted")
+    ACCEPTED,
+
+    @SerializedName("declined")
+    DECLINED
+}
+
 data class SessionCreate(
     val game_id: String,
     val group_id: String? = null,
@@ -65,4 +76,24 @@ data class GamingSession(
     val player_count: Int,
     val created_at: String,
     val updated_at: String
+)
+
+data class SessionParticipant(
+    val user: User,
+    val joined_at: String
+)
+
+data class InviteCreate(
+    val session_id: String,
+    val receiver_id: String
+)
+
+data class SessionInvite(
+    val id: String,
+    val session_id: String,
+    val sender_id: String,
+    val receiver_id: String,
+    val status: InviteStatus,
+    val created_at: String,
+    val responded_at: String?
 )

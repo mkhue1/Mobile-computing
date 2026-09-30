@@ -2,22 +2,35 @@ package com.example.gamercalendar.ui.screens
 
 import android.text.format.DateFormat
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuBoxScope
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
@@ -35,9 +48,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -59,7 +80,7 @@ private enum class TimeField { START, END }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateSessionScreen(
-    onSessionCreated: () -> Unit,
+    onSaved: () -> Unit,
     onCancel: () -> Unit,
     viewModel: CreateSessionViewModel = viewModel()
 ) {
@@ -70,10 +91,11 @@ fun CreateSessionScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
 
-    LaunchedEffect(uiState.createdSession) {
-        if (uiState.createdSession != null) {
-            Toast.makeText(context, "Session created", Toast.LENGTH_SHORT).show()
-            onSessionCreated()
+    LaunchedEffect(uiState.savedSession) {
+        if (uiState.savedSession != null) {
+            val message = if (uiState.isEditing) "Session updated" else "Session created"
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            onSaved()
         }
     }
 
@@ -81,37 +103,32 @@ fun CreateSessionScreen(
         modifier = Modifier.verticalScroll(rememberScrollState())
     ) {
         Text(
-            text = "Create session",
+            text = if (uiState.isEditing) "Edit session" else "Create session",
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
 
-        when {
-            uiState.isLoadingGames -> LoadingIndicator()
-
-            uiState.gamesError != null -> {
-                ErrorText(text = "Couldn't load games: ${uiState.gamesError}")
-                SecondaryButton(text = "Retry", onClick = viewModel::loadGames)
-            }
-
-            uiState.games.isEmpty() -> {
-                Text(
-                    text = "No games in the database yet. Add one through the API docs (/docs) for now.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                SecondaryButton(text = "Refresh", onClick = viewModel::loadGames)
-            }
-
-            else -> SelectDropdown(
-                label = "Game",
-                placeholder = "Choose a game",
-                options = uiState.games,
-                selected = uiState.games.firstOrNull { it.id == form.gameId },
-                optionLabel = Game::name,
-                onSelected = { game -> viewModel.updateForm { it.copy(gameId = game.id) } }
-            )
+        if (uiState.isLoadingSession) {
+            LoadingIndicator()
+            return@ScreenContainer
         }
+
+        uiState.loadError?.let { loadError ->
+            ErrorText(text = loadError)
+            SecondaryButton(text = "Retry", onClick = viewModel::loadExistingSession)
+            SecondaryButton(text = "Back", onClick = onCancel)
+            return@ScreenContainer
+        }
+
+        GameSearchField(
+            query = form.gameQuery,
+            results = uiState.gameResults,
+            isSearching = uiState.isSearchingGames,
+            error = uiState.gameSearchError,
+            hasSelection = form.gameId != null,
+            onQueryChange = viewModel::onGameQueryChange,
+            onGameSelected = viewModel::selectGame
+        )
 
         DefaultTextField(
             value = form.title,
@@ -197,14 +214,12 @@ fun CreateSessionScreen(
 
         if (form.visibility == SessionVisibility.GROUP) {
             when {
-                uiState.isLoadingGroups -> LoadingIndicator()
-
                 uiState.groupsError != null -> {
                     ErrorText(text = "Couldn't load groups: ${uiState.groupsError}")
                     SecondaryButton(text = "Retry", onClick = viewModel::loadGroups)
                 }
 
-                uiState.groups.isEmpty() -> {
+                !uiState.isLoadingGroups && uiState.groups.isEmpty() -> {
                     Text(
                         text = "You're not in any groups yet.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -219,7 +234,9 @@ fun CreateSessionScreen(
                     options = uiState.groups,
                     selected = uiState.groups.firstOrNull { it.id == form.groupId },
                     optionLabel = UserGroup::name,
-                    onSelected = { group -> viewModel.updateForm { it.copy(groupId = group.id) } }
+                    optionIcon = Icons.Default.Groups,
+                    onSelected = { group -> viewModel.updateForm { it.copy(groupId = group.id) } },
+                    isLoading = uiState.isLoadingGroups
                 )
             }
         }
@@ -248,7 +265,12 @@ fun CreateSessionScreen(
         }
 
         DefaultButton(
-            text = if (uiState.isSubmitting) "Creating…" else "Create session",
+            text = when {
+                uiState.isSubmitting && uiState.isEditing -> "Saving…"
+                uiState.isSubmitting -> "Creating…"
+                uiState.isEditing -> "Save changes"
+                else -> "Create session"
+            },
             onClick = viewModel::submit,
             enabled = !uiState.isSubmitting
         )
@@ -313,41 +335,127 @@ private fun LabeledSection(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun GameSearchField(
+    query: String,
+    results: List<Game>,
+    isSearching: Boolean,
+    error: String?,
+    hasSelection: Boolean,
+    onQueryChange: (String) -> Unit,
+    onGameSelected: (Game) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val hasSomethingToShow = results.isNotEmpty() || error != null || !isSearching
+    val showResults = expanded && query.isNotBlank() && !hasSelection && hasSomethingToShow
+
+    ExposedDropdownMenuBox(
+        expanded = showResults,
+        onExpandedChange = { expanded = it }
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = {
+                onQueryChange(it)
+                expanded = true
+            },
+            singleLine = true,
+            label = { Text("Game") },
+            placeholder = { Text("Search for a game") },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null
+                )
+            },
+            trailingIcon = {
+                if (isSearching) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+            },
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
+                .fillMaxWidth()
+        )
+
+        StyledDropdownMenu(
+            expanded = showResults,
+            onDismissRequest = { expanded = false }
+        ) {
+            when {
+                error != null -> DropdownMessage(text = error, isError = true)
+
+                results.isEmpty() -> DropdownMessage(text = "No games found")
+
+                else -> results.forEach { game ->
+                    StyledDropdownItem(
+                        text = highlightMatch(game.name, query),
+                        icon = Icons.Default.SportsEsports,
+                        onClick = {
+                            onGameSelected(game)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun <T> SelectDropdown(
     label: String,
     placeholder: String,
     options: List<T>,
     selected: T?,
     optionLabel: (T) -> String,
-    onSelected: (T) -> Unit
+    optionIcon: ImageVector,
+    onSelected: (T) -> Unit,
+    isLoading: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it }
+        expanded = expanded && !isLoading,
+        onExpandedChange = { expanded = it && !isLoading }
     ) {
         OutlinedTextField(
-            value = selected?.let(optionLabel).orEmpty(),
+            value = if (isLoading) "Loading…" else selected?.let(optionLabel).orEmpty(),
             onValueChange = {},
             readOnly = true,
+            enabled = !isLoading,
             singleLine = true,
             label = { Text(label) },
             placeholder = { Text(placeholder) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            trailingIcon = {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                }
+            },
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth()
         )
 
-        ExposedDropdownMenu(
+        StyledDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
             options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(optionLabel(option)) },
+                StyledDropdownItem(
+                    text = AnnotatedString(optionLabel(option)),
+                    icon = optionIcon,
+                    isSelected = option == selected,
                     onClick = {
                         onSelected(option)
                         expanded = false
@@ -355,6 +463,108 @@ private fun <T> SelectDropdown(
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExposedDropdownMenuBoxScope.StyledDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    ExposedDropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        shape = RoundedCornerShape(12.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+        content = content
+    )
+}
+
+@Composable
+private fun StyledDropdownItem(
+    text: AnnotatedString,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    isSelected: Boolean = false
+) {
+    val primary = MaterialTheme.colorScheme.primary
+
+    DropdownMenuItem(
+        text = {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (isSelected) primary else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        leadingIcon = {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(primary.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        },
+        trailingIcon = if (isSelected) {
+            {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = primary
+                )
+            }
+        } else {
+            null
+        },
+        onClick = onClick,
+        modifier = if (isSelected) Modifier.background(primary.copy(alpha = 0.08f)) else Modifier
+    )
+}
+
+@Composable
+private fun DropdownMessage(
+    text: String,
+    isError: Boolean = false
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+    )
+}
+
+@Composable
+private fun highlightMatch(text: String, query: String): AnnotatedString {
+    val needle = query.trim()
+    val start = text.indexOf(needle, ignoreCase = true)
+    if (needle.isEmpty() || start < 0) return AnnotatedString(text)
+
+    return buildAnnotatedString {
+        append(text)
+        addStyle(
+            style = SpanStyle(
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            ),
+            start = start,
+            end = start + needle.length
+        )
     }
 }
 

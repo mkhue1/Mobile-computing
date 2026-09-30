@@ -56,6 +56,23 @@ object SessionTime {
         return format.format(Date(epochMillis))
     }
 
+    /** Parses API timestamps such as `2026-10-01T10:00:00Z` or `2026-10-01T10:00:00.123456+00:00`. */
+    fun parseIso(value: String): Long? {
+        val withoutFraction = value.replace(Regex("\\.\\d+"), "")
+        return try {
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).parse(withoutFraction)?.time
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** e.g. "Wed 1 Oct · 8:00 pm – 10:00 pm", in the device's time zone. */
+    fun formatRange(context: Context, startEpochMillis: Long, endEpochMillis: Long): String {
+        val date = SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(Date(startEpochMillis))
+        val time = DateFormat.getTimeFormat(context)
+        return "$date · ${time.format(Date(startEpochMillis))} – ${time.format(Date(endEpochMillis))}"
+    }
+
     fun formatDate(dateUtcMillis: Long): String {
         val format = SimpleDateFormat("EEE d MMM yyyy", Locale.getDefault())
         format.timeZone = utc

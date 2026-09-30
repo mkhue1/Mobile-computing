@@ -5,6 +5,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.helpers.session import can_view_session
 from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionType, SessionVisibility, InviteStatus
 from app.models.user import User
 from app.models.user_group import UserGroup, UserGroupMember
@@ -242,3 +243,25 @@ def decline_invite(
     db.commit()
 
     return InviteAcitionResponse(status=True, message="invite declined", id=session_invite.session_id)
+
+
+# Declared after the fixed /sessions/... paths so they aren't captured as a session id.
+@router.get(
+    "/{session_id}",
+    response_model=SessionResponse,
+)
+def get_session(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session = db.get(GamingSession, session_id)
+
+    # 404 rather than 403 so sessions a user can't see aren't revealed to exist.
+    if session is None or not can_view_session(db, session, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} does not exist",
+        )
+
+    return session

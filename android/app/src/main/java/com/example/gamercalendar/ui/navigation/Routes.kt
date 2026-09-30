@@ -7,4 +7,11 @@ object Routes {
     const val ITEM_4 = "item4"
     const val ITEM_5 = "item5"
     const val CREATE_SESSION = "sessions/create"
+
+    const val ARG_SESSION_ID = "sessionId"
+    const val MANAGE_SESSION = "session/{$ARG_SESSION_ID}"
+    const val EDIT_SESSION = "session/{$ARG_SESSION_ID}/edit"
+
+    fun manageSession(sessionId: String) = "session/$sessionId"
+    fun editSession(sessionId: String) = "session/$sessionId/edit"
 }

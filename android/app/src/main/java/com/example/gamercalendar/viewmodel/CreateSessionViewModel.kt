@@ -1,5 +1,6 @@
 package com.example.gamercalendar.viewmodel
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gamercalendar.data.model.Game
@@ -10,8 +11,14 @@ import com.example.gamercalendar.data.model.SessionVisibility
 import com.example.gamercalendar.data.model.UserGroup
 import com.example.gamercalendar.data.repository.GroupRepository
 import com.example.gamercalendar.data.repository.SessionRepository
+import com.example.gamercalendar.ui.navigation.Routes
 import com.example.gamercalendar.util.SessionTime
 import com.example.gamercalendar.util.apiErrorDetail
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,8 +26,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
+private const val GAME_SEARCH_DEBOUNCE_MS = 250L
+
 data class CreateSessionForm(
     val gameId: String? = null,
+    val gameQuery: String = "",
     val groupId: String? = null,
     val title: String = "",
     val description: String = "",
@@ -74,28 +84,93 @@ data class CreateSessionForm(
 
 data class CreateSessionUiState(
     val form: CreateSessionForm = CreateSessionForm.default(),
-    val games: List<Game> = emptyList(),
-    val isLoadingGames: Boolean = false,
-    val gamesError: String? = null,
+    val gameResults: List<Game> = emptyList(),
+    val isSearchingGames: Boolean = false,
+    val gameSearchError: String? = null,
     val groups: List<UserGroup> = emptyList(),
     val isLoadingGroups: Boolean = false,
     val groupsError: String? = null,
     val isSubmitting: Boolean = false,
     val error: String? = null,
-    val createdSession: GamingSession? = null
+    val savedSession: GamingSession? = null,
+
+    val isEditing: Boolean = false,
+    val isLoadingSession: Boolean = false,
+    val loadError: String? = null,
+    val originalStartEpochMillis: Long? = null
 )
 
-class CreateSessionViewModel : ViewModel() {
+class CreateSessionViewModel(
+    savedStateHandle: SavedStateHandle
+) : ViewModel() {
+
+    /** Set when editing an existing session; null when creating a new one. */
+    private val sessionId: String? = savedStateHandle[Routes.ARG_SESSION_ID]
 
     private val repository = SessionRepository()
     private val groupRepository = GroupRepository()
 
-    private val _uiState = MutableStateFlow(CreateSessionUiState())
+    private val _uiState = MutableStateFlow(CreateSessionUiState(isEditing = sessionId != null))
     val uiState: StateFlow<CreateSessionUiState> = _uiState.asStateFlow()
 
+    private var gameSearchJob: Job? = null
+
     init {
-        loadGames()
         loadGroups()
+        loadExistingSession()
+    }
+
+    fun loadExistingSession() {
+        val sessionId = sessionId ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingSession = true, loadError = null) }
+            try {
+                val (session, games) = coroutineScope {
+                    val session = async { repository.getSession(sessionId) }
+                    val games = async { repository.getGames() }
+                    session.await() to games.await()
+                }
+                val start = SessionTime.parseIso(session.start_at)
+                    ?: throw IllegalStateException("Invalid start time")
+                val end = SessionTime.parseIso(session.end_at)
+                    ?: throw IllegalStateException("Invalid end time")
+                val startLocal = Calendar.getInstance().apply { timeInMillis = start }
+                val endLocal = Calendar.getInstance().apply { timeInMillis = end }
+
+                val form = CreateSessionForm(
+                    gameId = session.game_id,
+                    gameQuery = games.firstOrNull { it.id == session.game_id }?.name.orEmpty(),
+                    groupId = session.group_id,
+                    title = session.title.orEmpty(),
+                    description = session.description.orEmpty(),
+                    dateUtcMillis = SessionTime.localDateToUtcMillis(
+                        startLocal.get(Calendar.YEAR),
+                        startLocal.get(Calendar.MONTH),
+                        startLocal.get(Calendar.DAY_OF_MONTH)
+                    ),
+                    startHour = startLocal.get(Calendar.HOUR_OF_DAY),
+                    startMinute = startLocal.get(Calendar.MINUTE),
+                    endHour = endLocal.get(Calendar.HOUR_OF_DAY),
+                    endMinute = endLocal.get(Calendar.MINUTE),
+                    sessionType = session.session_type,
+                    visibility = session.visibility,
+                    locationName = session.location_name.orEmpty(),
+                    playerLimit = session.player_limit?.toString().orEmpty()
+                )
+
+                _uiState.update {
+                    it.copy(form = form, isLoadingSession = false, originalStartEpochMillis = start)
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingSession = false,
+                        loadError = apiErrorDetail(e) ?: e.message ?: "Couldn't load session"
+                    )
+                }
+            }
+        }
     }
 
     fun loadGroups() {
@@ -115,21 +190,40 @@ class CreateSessionViewModel : ViewModel() {
         }
     }
 
-    fun loadGames() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingGames = true, gamesError = null) }
+    fun onGameQueryChange(query: String) {
+        updateForm { it.copy(gameQuery = query, gameId = null) }
+        gameSearchJob?.cancel()
+
+        if (query.isBlank()) {
+            _uiState.update {
+                it.copy(gameResults = emptyList(), isSearchingGames = false, gameSearchError = null)
+            }
+            return
+        }
+
+        _uiState.update { it.copy(isSearchingGames = true, gameSearchError = null) }
+        gameSearchJob = viewModelScope.launch {
+            delay(GAME_SEARCH_DEBOUNCE_MS)
             try {
-                val games = repository.getGames()
-                _uiState.update { it.copy(games = games, isLoadingGames = false) }
+                val results = repository.searchGames(query.trim())
+                _uiState.update { it.copy(gameResults = results, isSearchingGames = false) }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
-                        isLoadingGames = false,
-                        gamesError = apiErrorDetail(e) ?: e.message ?: "Couldn't load games"
+                        isSearchingGames = false,
+                        gameSearchError = apiErrorDetail(e) ?: e.message ?: "Couldn't search games"
                     )
                 }
             }
         }
+    }
+
+    fun selectGame(game: Game) {
+        gameSearchJob?.cancel()
+        updateForm { it.copy(gameId = game.id, gameQuery = game.name) }
+        _uiState.update { it.copy(isSearchingGames = false) }
     }
 
     fun updateForm(transform: (CreateSessionForm) -> CreateSessionForm) {
@@ -161,13 +255,18 @@ class CreateSessionViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, error = null) }
             try {
-                val session = repository.createSession(request)
-                _uiState.update { it.copy(isSubmitting = false, createdSession = session) }
+                val session = if (sessionId != null) {
+                    repository.updateSession(sessionId, request)
+                } else {
+                    repository.createSession(request)
+                }
+                _uiState.update { it.copy(isSubmitting = false, savedSession = session) }
             } catch (e: Exception) {
+                val fallback = if (sessionId != null) "Couldn't save changes" else "Couldn't create session"
                 _uiState.update {
                     it.copy(
                         isSubmitting = false,
-                        error = apiErrorDetail(e) ?: e.message ?: "Couldn't create session"
+                        error = apiErrorDetail(e) ?: e.message ?: fallback
                     )
                 }
             }
@@ -178,7 +277,9 @@ class CreateSessionViewModel : ViewModel() {
         if (form.gameId == null) {
             return "Choose a game"
         }
-        if (form.startEpochMillis <= System.currentTimeMillis()) {
+        // An in-progress session can still be edited as long as its start time isn't moved.
+        val startChanged = form.startEpochMillis != _uiState.value.originalStartEpochMillis
+        if (startChanged && form.startEpochMillis <= System.currentTimeMillis()) {
             return "Start time must be in the future"
         }
         if (form.sessionType == SessionType.IN_PERSON && form.locationName.isBlank()) {
