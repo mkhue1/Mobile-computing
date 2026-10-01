@@ -22,6 +22,7 @@ data class GroupDetailUiState(
     val group: GroupDetailResponse? = null,
     val currentUserId: String? = null,
     val addableFriends: List<User> = emptyList(),
+    val friendSearch: String = "",
     val isLoading: Boolean = false,
     val error: String? = null,
     val isWorking: Boolean = false,
@@ -31,6 +32,13 @@ data class GroupDetailUiState(
 ) {
     val isOwner: Boolean
         get() = group != null && group.owner_id == currentUserId
+
+    val filteredAddableFriends: List<User>
+        get() {
+            val query = friendSearch.trim()
+            if (query.isEmpty()) return addableFriends
+            return addableFriends.filter { it.username.contains(query, ignoreCase = true) }
+        }
 }
 
 class GroupDetailViewModel(
@@ -78,13 +86,17 @@ class GroupDetailViewModel(
         }
     }
 
+    fun onFriendSearchChange(value: String) {
+        _uiState.update { it.copy(friendSearch = value) }
+    }
+
     fun addMember(userId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isWorking = true, actionError = null) }
             try {
                 groupRepository.addMember(groupId, userId)
                 load()
-                _uiState.update { it.copy(isWorking = false) }
+                _uiState.update { it.copy(isWorking = false, friendSearch = "") }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(isWorking = false, actionError = errorMessage(e, "Couldn't add member"))

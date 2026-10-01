@@ -39,6 +39,7 @@ import com.example.gamercalendar.ui.components.dialogs.GroupNameDialog
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
+import com.example.gamercalendar.ui.components.inputs.DefaultTextField
 import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.viewmodel.GroupDetailViewModel
@@ -126,19 +127,35 @@ fun GroupDetailScreen(
                         message = "All your friends are already in this group."
                     )
                 } else {
-                    AppCard {
-                        uiState.addableFriends.forEachIndexed { index, friend ->
-                            if (index > 0) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 8.dp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                    DefaultTextField(
+                        value = uiState.friendSearch,
+                        onValueChange = viewModel::onFriendSearchChange,
+                        label = "Search friends",
+                        placeholder = "Username"
+                    )
+
+                    val filteredFriends = uiState.filteredAddableFriends
+
+                    if (filteredFriends.isEmpty()) {
+                        EmptyState(
+                            title = "No friends match",
+                            message = "Try a different username."
+                        )
+                    } else {
+                        AppCard {
+                            filteredFriends.forEachIndexed { index, friend ->
+                                if (index > 0) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                                    )
+                                }
+                                AddableFriendRow(
+                                    friend = friend,
+                                    enabled = !uiState.isWorking,
+                                    onAddClick = { viewModel.addMember(friend.id) }
                                 )
                             }
-                            AddableFriendRow(
-                                friend = friend,
-                                enabled = !uiState.isWorking,
-                                onAddClick = { viewModel.addMember(friend.id) }
-                            )
                         }
                     }
                 }
