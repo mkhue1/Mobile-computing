@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse
-from app.security import hash_password
+from app.security import get_current_user, hash_password
 
 
 router = APIRouter(
@@ -14,15 +14,42 @@ router = APIRouter(
     tags=["users"],
 )
 
+SEARCH_MIN_LENGTH = 2
+
+
+def _escape_like(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
 
 @router.get(
     "/",
     response_model=list[UserResponse],
 )
 def get_users(
+    search: str | None = Query(
+        None,
+        description="Case-insensitive username match; ignored if under 2 characters",
+    ),
+    limit: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     statement = select(User)
+
+    term = search.strip() if search else ""
+    if len(term) >= SEARCH_MIN_LENGTH:
+        statement = (
+            statement.where(
+                User.username.ilike(f"%{_escape_like(term)}%", escape="\\"),
+                User.id != current_user.id,
+            )
+            .order_by(User.username)
+            .limit(limit)
+        )
 
     return db.scalars(statement).all()
 
