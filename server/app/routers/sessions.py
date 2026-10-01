@@ -92,6 +92,22 @@ def create_session(
     db.add(new_session)
     db.flush()
     db.add(SessionParticipant(session_id = new_session.id, user_id = current_user.id))
+    
+    if session.group_id is not None:
+        member_ids = db.scalars(
+            select(UserGroupMember.user_id).where(
+                UserGroupMember.group_id == session.group_id,
+                UserGroupMember.user_id != current_user.id,
+            )
+        ).all()
+        db.add_all(
+            SessionInvite(
+                session_id=new_session.id,
+                sender_id=current_user.id,
+                receiver_id=member_id,
+            )
+            for member_id in member_ids
+        )
     db.commit()
     db.refresh(new_session)
 
