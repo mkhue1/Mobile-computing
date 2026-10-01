@@ -208,7 +208,7 @@ def get_invites(
     
     statement = (
         select(SessionInvite)
-        .where(SessionInvite.receiver_id == current_user.id)
+        .where(SessionInvite.receiver_id == current_user.id, SessionInvite.status == InviteStatus.PENDING)
         .order_by(SessionInvite.created_at.desc())
     )
 
