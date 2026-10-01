@@ -45,11 +45,11 @@ class SessionResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class SessionDelete(BaseModel):
+class SessionCancel(BaseModel):
     session_id: UUID
-    
 
-class SessionDeleteResponse(BaseModel):
+
+class SessionCancelResponse(BaseModel):
     status: bool
     message: str
     id: UUID

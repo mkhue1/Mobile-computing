@@ -41,6 +41,7 @@ class InviteStatus(str, Enum):
     PENDING = "pending"
     ACCEPTED = "accepted"
     DECLINED = "declined"
+    CANCELLED = "cancelled"
 
 
 class RecurrenceFrequency(str, Enum):

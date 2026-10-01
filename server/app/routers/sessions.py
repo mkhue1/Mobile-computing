@@ -1,15 +1,15 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.helpers.session import can_view_session
-from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionType, SessionVisibility, InviteStatus
+from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionVisibility, InviteStatus
 from app.models.user import User
 from app.models.user_group import UserGroup, UserGroupMember
-from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, SessionResponse, SessionCreate
+from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, SessionCancelResponse, SessionResponse, SessionCreate
 from app.security import get_current_user
 
 
@@ -96,6 +96,40 @@ def create_session(
     db.refresh(new_session)
 
     return new_session
+
+@router.patch(
+    "/{session_id}",
+    response_model=SessionCancelResponse,
+)
+def cancel_session(
+    session_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    session = db.scalars(
+        select(GamingSession).where(GamingSession.id == session_id).with_for_update()
+    ).one_or_none()
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Session {session_id} does not exist")
+    if current_user.id != session.organiser_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="User attempting to delete session they are not the organiser of")
+    if session.status != SessionStatus.OPEN:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is already {session.status.value}")
+
+    session.status = SessionStatus.CANCELLED
+
+    db.execute(
+        update(SessionInvite)
+        .where(
+            SessionInvite.session_id == session_id,
+            SessionInvite.status == InviteStatus.PENDING,
+        )
+        .values(status=InviteStatus.CANCELLED, responded_at=func.now())
+    )
+
+    db.commit()
+    return SessionCancelResponse(status=True, message="session cancelled", id=session_id)
+
 
 @router.post(
     "/{session_id}/invite", # session id is sent in InviteCreate anyway so doesnt need to be in route - is there a better route name to use?
@@ -199,8 +233,8 @@ def accept_invite(
 
     if gaming_session.status != SessionStatus.OPEN:
         raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Session {session_invite.session_id} cannot be accepted as it is cancelled",
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Session {session_invite.session_id} cannot be accepted as it is {gaming_session.status.value}",
         )
 
     
