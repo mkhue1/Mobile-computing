@@ -7,7 +7,6 @@ import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserGroup
 import com.example.gamercalendar.data.repository.FriendRepository
 import com.example.gamercalendar.data.repository.GroupRepository
-import com.example.gamercalendar.data.repository.UserRepository
 import com.example.gamercalendar.util.apiErrorDetail
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -37,7 +36,6 @@ data class FriendsHubUiState(
 class FriendsHubViewModel : ViewModel() {
 
     private val repository = FriendRepository()
-    private val userRepository = UserRepository()
     private val groupRepository = GroupRepository()
 
     private val _uiState = MutableStateFlow(FriendsHubUiState(isLoading = true))
@@ -60,23 +58,21 @@ class FriendsHubViewModel : ViewModel() {
                     val friendsDeferred = async { repository.getFriends() }
                     val incomingDeferred = async { repository.getFriendRequests("incoming") }
                     val outgoingDeferred = async { repository.getFriendRequests("outgoing") }
-                    val usersDeferred = async { userRepository.getUsers() }
                     val groupsDeferred = async { groupRepository.getGroups() }
 
                     val friends = friendsDeferred.await()
                     val incoming = incomingDeferred.await()
                     val outgoing = outgoingDeferred.await()
-                    val usersById = usersDeferred.await().associateBy { it.id }
                     val groups = groupsDeferred.await()
 
                     _uiState.update {
                         it.copy(
                             friends = friends,
                             incomingRequests = incoming.map { req ->
-                                FriendRequestUi(request = req, otherUser = usersById[req.sender_id])
+                                FriendRequestUi(request = req, otherUser = req.sender)
                             },
                             outgoingRequests = outgoing.map { req ->
-                                FriendRequestUi(request = req, otherUser = usersById[req.receiver_id])
+                                FriendRequestUi(request = req, otherUser = req.receiver)
                             },
                             groups = groups,
                             isLoading = false,

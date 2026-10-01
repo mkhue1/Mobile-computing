@@ -5,8 +5,8 @@ import com.example.gamercalendar.data.model.User
 
 class UserRepository {
 
-    suspend fun getUsers(): List<User> {
-        return ApiClient.api.getUsers()
+    suspend fun getUsers(search: String? = null, limit: Int? = null): List<User> {
+        return ApiClient.api.getUsers(search = search, limit = limit)
     }
 
     suspend fun getCurrentUser(): User {

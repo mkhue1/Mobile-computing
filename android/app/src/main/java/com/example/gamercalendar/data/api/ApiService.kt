@@ -31,7 +31,10 @@ import retrofit2.http.Query
 interface ApiService {
 
     @GET("users/")
-    suspend fun getUsers(): List<User>
+    suspend fun getUsers(
+        @Query("search") search: String? = null,
+        @Query("limit") limit: Int? = null
+    ): List<User>
 
     @POST("users/")
     suspend fun createUser(

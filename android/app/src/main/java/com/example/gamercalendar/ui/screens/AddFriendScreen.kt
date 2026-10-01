@@ -70,6 +70,8 @@ fun AddFriendScreen(
                 }
             }
 
+            uiState.isSearching -> LoadingIndicator()
+
             uiState.results.isEmpty() -> {
                 if (uiState.error == null) {
                     EmptyState(

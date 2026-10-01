@@ -8,7 +8,9 @@ data class FriendRequestResponse(
     val id: String,
     val sender_id: String,
     val receiver_id: String,
-    val created_at: String
+    val created_at: String,
+    val sender: User? = null,
+    val receiver: User? = null
 )
 
 data class FriendshipResponse(
