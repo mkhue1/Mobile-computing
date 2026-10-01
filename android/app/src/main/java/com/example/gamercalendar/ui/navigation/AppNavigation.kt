@@ -45,7 +45,14 @@ fun AppNavigation(
         topBar = {
             AppTopBar(
                 onProfileClick = {
-                    navController.navigate(Routes.FRIENDS_HUB)
+                    navController.navigate(Routes.USERS) {
+                        launchSingleTop = true
+                        restoreState = true
+
+                        popUpTo(Routes.ITEM_1) {
+                            saveState = true
+                        }
+                    }
                 }
             )
         },
@@ -53,16 +60,16 @@ fun AppNavigation(
             AppBottomBar(
                 currentRoute = currentRoute,
                 onNavigate = { route ->
-                    // Home always resets to its root; saving/restoring state here would bring back
-                    // screens stacked on top of it, such as Create session.
-                    val isHome = route == Routes.ITEM_1
+                    // Home and Friends always reset to their root; saving/restoring state here would
+                    // bring back screens stacked on top of them, such as Create session or Add friend.
+                    val resetsToRoot = route == Routes.ITEM_1 || route == Routes.FRIENDS_HUB
 
                     navController.navigate(route) {
                         launchSingleTop = true
-                        restoreState = !isHome
+                        restoreState = !resetsToRoot
 
                         popUpTo(Routes.ITEM_1) {
-                            saveState = !isHome
+                            saveState = !resetsToRoot
                         }
                     }
                 }
