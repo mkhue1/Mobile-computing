@@ -39,10 +39,11 @@ if you are already in your venv you can just run the pytest command.
 From the repo root:
 
 ```
-docker compose run --rm --no-deps backend sh -c "pip install -r requirements-dev.txt && pytest"
+docker compose run --rm backend sh -c "pip install -r requirements-dev.txt && pytest"
 ```
 
 This connects over the compose network and works out the test database from `DATABASE_URL`, so `.env.test` isn't used.
+
 
 ## How the database is handled
 
