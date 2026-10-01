@@ -45,6 +45,15 @@ class SessionResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class SessionCancel(BaseModel):
+    session_id: UUID
+
+
+class SessionCancelResponse(BaseModel):
+    status: bool
+    message: str
+    id: UUID
+
 class InviteCreate(BaseModel):
     session_id: UUID
     receiver_id: UUID
