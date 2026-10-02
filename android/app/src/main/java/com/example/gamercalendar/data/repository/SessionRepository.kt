@@ -46,6 +46,10 @@ class SessionRepository {
         ApiClient.api.leaveSession(sessionId)
     }
 
+    suspend fun removeParticipant(sessionId: String, userId: String) {
+        ApiClient.api.removeSessionParticipant(sessionId, userId)
+    }
+
     suspend fun getParticipants(sessionId: String): List<SessionParticipant> {
         return ApiClient.api.getSessionParticipants(sessionId)
     }

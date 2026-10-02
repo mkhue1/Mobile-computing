@@ -171,16 +171,50 @@ def leave_session(
     if session.status != SessionStatus.OPEN:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is {session.status.value} and can't be left")
 
+    _remove_participant(db, session, participant)
+    db.commit()
+
+
+@router.delete(
+    "/{session_id}/participants/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_participant(
+    session_id: UUID,
+    user_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session = db.scalars(
+        select(GamingSession).where(GamingSession.id == session_id).with_for_update()
+    ).one_or_none()
+    if session is None or not can_view_session(db, session, current_user.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Session {session_id} does not exist")
+    if current_user.id != session.organiser_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Only the organiser can remove players")
+    if user_id == session.organiser_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="The organiser can't be removed; cancel the session instead")
+    if session.status != SessionStatus.OPEN:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is {session.status.value} and players can't be removed")
+
+    participant = db.get(SessionParticipant, (session_id, user_id))
+    if participant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"User {user_id} isn't in session {session_id}")
+
+    _remove_participant(db, session, participant)
+    db.commit()
+
+
+def _remove_participant(db: Session, session: GamingSession, participant: SessionParticipant) -> None:
     db.delete(participant)
     session.player_count -= 1
     # Removing the invite lets the organiser invite them again and stops it granting access to the session.
     db.execute(
         delete(SessionInvite).where(
-            SessionInvite.session_id == session_id,
-            SessionInvite.receiver_id == current_user.id,
+            SessionInvite.session_id == session.id,
+            SessionInvite.receiver_id == participant.user_id,
         )
     )
-    db.commit()
 
 
 @router.post(

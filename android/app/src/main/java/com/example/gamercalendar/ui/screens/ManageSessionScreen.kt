@@ -20,11 +20,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -71,6 +75,7 @@ fun ManageSessionScreen(
 
     var showInviteSheet by remember { mutableStateOf(false) }
     var pendingConfirmation by remember { mutableStateOf<PendingConfirmation?>(null) }
+    var pendingRemoval by remember { mutableStateOf<User?>(null) }
 
     // Runs each time the screen is shown, so returning from Edit session shows the changes.
     LaunchedEffect(Unit) {
@@ -155,7 +160,13 @@ fun ManageSessionScreen(
                     currentUserId = uiState.currentUserId,
                     isLoading = uiState.isLoadingParticipants,
                     error = uiState.participantsError,
-                    onRetry = viewModel::loadParticipants
+                    onRetry = viewModel::loadParticipants,
+                    onRemove = if (uiState.isOrganiser && !uiState.isCancelled) {
+                        { user -> pendingRemoval = user }
+                    } else {
+                        null
+                    },
+                    removeEnabled = !uiState.isWorking
                 )
 
                 if (uiState.isOrganiser && uiState.sentInvites.isNotEmpty()) {
@@ -274,6 +285,20 @@ fun ManageSessionScreen(
 
         null -> Unit
     }
+
+    pendingRemoval?.let { user ->
+        ConfirmDialog(
+            title = "Remove ${user.username}?",
+            text = "They'll lose their spot and need a new invite to join again.",
+            confirmLabel = "Remove",
+            dismissLabel = "Keep",
+            onConfirm = {
+                pendingRemoval = null
+                viewModel.removePlayer(user)
+            },
+            onDismiss = { pendingRemoval = null }
+        )
+    }
 }
 
 @Composable
@@ -310,7 +335,9 @@ private fun PlayersCard(
     currentUserId: String?,
     isLoading: Boolean,
     error: String?,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onRemove: ((User) -> Unit)? = null,
+    removeEnabled: Boolean = true
 ) {
     AppCard {
         when {
@@ -337,10 +364,13 @@ private fun PlayersCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                         )
                     }
+                    val isOrganiser = user.id == organiserId
                     PlayerRow(
                         user = user,
-                        isOrganiser = user.id == organiserId,
-                        isCurrentUser = user.id == currentUserId
+                        isOrganiser = isOrganiser,
+                        isCurrentUser = user.id == currentUserId,
+                        onRemove = onRemove?.takeUnless { isOrganiser }?.let { remove -> { remove(user) } },
+                        removeEnabled = removeEnabled
                     )
                 }
             }
@@ -352,7 +382,9 @@ private fun PlayersCard(
 private fun PlayerRow(
     user: User,
     isOrganiser: Boolean,
-    isCurrentUser: Boolean
+    isCurrentUser: Boolean,
+    onRemove: (() -> Unit)? = null,
+    removeEnabled: Boolean = true
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -375,6 +407,19 @@ private fun PlayerRow(
         }
         if (isOrganiser) {
             Tag(text = "Organiser")
+        }
+        if (onRemove != null) {
+            IconButton(
+                onClick = onRemove,
+                enabled = removeEnabled,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove ${user.username}",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

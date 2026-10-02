@@ -666,6 +666,97 @@ def test_leave_unknown_session(client, make_user, auth_headers):
     assert response.status_code == 404
 
 
+# --- DELETE /sessions/{session_id}/participants/{user_id} ---------------------
+
+
+def test_remove_participant(client, db, auth_headers, joined):
+    organiser, player, session = joined
+
+    response = client.delete(
+        f"/sessions/{session['id']}/participants/{player.id}", headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 204
+    assert db.get(SessionParticipant, (UUID(session["id"]), player.id)) is None
+    assert db.get(GamingSession, UUID(session["id"])).player_count == 1
+    # The removed player loses access to the private session.
+    assert client.get(f"/sessions/{session['id']}", headers=auth_headers(player)).status_code == 404
+
+
+def test_removed_player_can_be_reinvited(client, auth_headers, send_invite, joined):
+    organiser, player, session = joined
+    client.delete(
+        f"/sessions/{session['id']}/participants/{player.id}", headers=auth_headers(organiser)
+    )
+
+    response = send_invite(organiser, session["id"], player)
+
+    assert response.status_code == 201, response.text
+
+
+def test_only_organiser_can_remove_participants(client, db, make_user, auth_headers, create_session, send_invite):
+    organiser = make_user("organiser")
+    player_a = make_user("player_a")
+    player_b = make_user("player_b")
+    session = create_session(organiser)
+    for player in (player_a, player_b):
+        invite = send_invite(organiser, session["id"], player).json()
+        client.post(
+            f"/sessions/{session['id']}/accept",
+            json={"invite_id": invite["id"]},
+            headers=auth_headers(player),
+        )
+
+    response = client.delete(
+        f"/sessions/{session['id']}/participants/{player_b.id}", headers=auth_headers(player_a)
+    )
+
+    assert response.status_code == 403
+    assert db.get(SessionParticipant, (UUID(session["id"]), player_b.id)) is not None
+
+
+def test_organiser_cannot_remove_themselves(client, auth_headers, joined):
+    organiser, _, session = joined
+
+    response = client.delete(
+        f"/sessions/{session['id']}/participants/{organiser.id}", headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 400
+
+
+def test_cannot_remove_from_cancelled_session(client, auth_headers, joined):
+    organiser, player, session = joined
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    response = client.delete(
+        f"/sessions/{session['id']}/participants/{player.id}", headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 409
+
+
+def test_remove_user_not_in_session(client, make_user, auth_headers, joined):
+    organiser, _, session = joined
+
+    response = client.delete(
+        f"/sessions/{session['id']}/participants/{make_user('stranger').id}",
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 404
+
+
+def test_remove_from_unknown_session(client, make_user, auth_headers):
+    user = make_user()
+
+    response = client.delete(
+        f"/sessions/{uuid4()}/participants/{uuid4()}", headers=auth_headers(user)
+    )
+
+    assert response.status_code == 404
+
+
 # --- POST /sessions/{session_id}/invite ---------------------------------------
 
 

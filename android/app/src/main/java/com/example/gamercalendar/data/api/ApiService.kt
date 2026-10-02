@@ -148,6 +148,12 @@ interface ApiService {
         @Path("sessionId") sessionId: String
     )
 
+    @DELETE("sessions/{sessionId}/participants/{userId}")
+    suspend fun removeSessionParticipant(
+        @Path("sessionId") sessionId: String,
+        @Path("userId") userId: String
+    )
+
     @GET("sessions/{sessionId}/participants")
     suspend fun getSessionParticipants(
         @Path("sessionId") sessionId: String

@@ -279,6 +279,27 @@ class ManageSessionViewModel(
         }
     }
 
+    fun removePlayer(user: User) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, actionError = null) }
+            try {
+                sessionRepository.removeParticipant(sessionId, user.id)
+                _uiState.update { state ->
+                    state.copy(
+                        isWorking = false,
+                        participants = state.participants.filterNot { it.user.id == user.id },
+                        session = state.session?.let { it.copy(player_count = it.player_count - 1) },
+                        message = "Removed ${user.username}"
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(isWorking = false, actionError = errorMessage(e, "Couldn't remove ${user.username}"))
+                }
+            }
+        }
+    }
+
     fun leaveSession() {
         viewModelScope.launch {
             _uiState.update { it.copy(isWorking = true, actionError = null) }
