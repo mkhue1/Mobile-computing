@@ -700,6 +700,96 @@ def test_invite_to_unknown_session(make_user, send_invite):
     assert response.status_code == 404
 
 
+def test_reinvite_after_decline(client, auth_headers, send_invite, invited):
+    organiser, invitee, session, invite = invited
+    client.post(
+        f"/sessions/{session['id']}/decline",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    response = send_invite(organiser, session["id"], invitee)
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["id"] == invite["id"]
+    assert body["status"] == "pending"
+    assert body["responded_at"] is None
+
+    pending = client.get("/sessions/invites", headers=auth_headers(invitee)).json()
+    assert [i["id"] for i in pending] == [invite["id"]]
+
+
+def test_reopened_invite_can_be_accepted(client, db, auth_headers, send_invite, invited):
+    organiser, invitee, session, invite = invited
+    request = dict(json={"invite_id": invite["id"]}, headers=auth_headers(invitee))
+    client.post(f"/sessions/{session['id']}/decline", **request)
+    send_invite(organiser, session["id"], invitee)
+
+    response = client.post(f"/sessions/{session['id']}/accept", **request)
+
+    assert response.status_code == 200, response.text
+    assert db.get(SessionParticipant, (UUID(session["id"]), invitee.id)) is not None
+
+
+def test_cannot_invite_to_cancelled_session(
+    client, make_user, auth_headers, create_session, send_invite
+):
+    organiser = make_user("organiser")
+    session = create_session(organiser)
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    response = send_invite(organiser, session["id"], make_user("target"))
+
+    assert response.status_code == 409
+
+
+def test_cannot_invite_self(make_user, create_session, send_invite):
+    organiser = make_user("organiser")
+    session = create_session(organiser)
+
+    response = send_invite(organiser, session["id"], organiser)
+
+    assert response.status_code == 400
+
+
+def test_cannot_invite_unknown_user(client, make_user, auth_headers, create_session):
+    organiser = make_user("organiser")
+    session = create_session(organiser)
+
+    response = client.post(
+        f"/sessions/{session['id']}/invite",
+        json={"session_id": session["id"], "receiver_id": str(uuid4())},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 404
+
+
+def test_cannot_invite_existing_player(send_invite, joined):
+    organiser, player, session = joined
+
+    response = send_invite(organiser, session["id"], player)
+
+    assert response.status_code == 409
+
+
+def test_invite_rejects_mismatched_session_ids(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    session = create_session(organiser)
+    other_session = create_session(organiser)
+
+    response = client.post(
+        f"/sessions/{session['id']}/invite",
+        json={"session_id": other_session["id"], "receiver_id": str(make_user("target").id)},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 400
+
+
 # --- GET /sessions/invites ----------------------------------------------------
 
 

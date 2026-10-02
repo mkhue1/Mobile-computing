@@ -190,11 +190,17 @@ def leave_session(
 
 )
 def create_invite(
+    session_id: UUID,
     invite: InviteCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 
 ):
+    if invite.session_id != session_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session id in the body doesn't match the URL",
+        )
 
     session = db.scalars(
             select(GamingSession).where(GamingSession.id == invite.session_id)
@@ -211,14 +217,48 @@ def create_invite(
             detail=f"User is trying to invite to a session they are not the organiser of",
         )
 
+    if session.status != SessionStatus.OPEN:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Session {invite.session_id} is {session.status.value} and can't take invites",
+        )
+
+    if invite.receiver_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You can't invite yourself",
+        )
+
+    if db.get(User, invite.receiver_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User {invite.receiver_id} does not exist",
+        )
+
+    if db.get(SessionParticipant, (invite.session_id, invite.receiver_id)) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"User {invite.receiver_id} is already in the session",
+        )
+
     existing = db.scalars(
             select(SessionInvite).where(SessionInvite.session_id == invite.session_id, SessionInvite.receiver_id == invite.receiver_id)
         ).first()
     if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Invitee {invite.receiver_id} already invited to session",
-        )
+        if existing.status == InviteStatus.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Invitee {invite.receiver_id} already invited to session",
+            )
+
+        # Only one invite per user per session is allowed, so a past invite is reopened.
+        existing.status = InviteStatus.PENDING
+        existing.sender_id = current_user.id
+        existing.created_at = func.now()
+        existing.responded_at = None
+        db.commit()
+        db.refresh(existing)
+        return existing
 
     new_invite = SessionInvite(
         session_id=invite.session_id,
