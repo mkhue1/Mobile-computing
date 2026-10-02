@@ -84,8 +84,8 @@ fun ManageSessionScreen(
         }
     }
 
-    LaunchedEffect(uiState.hasLeft) {
-        if (uiState.hasLeft) onLeft()
+    LaunchedEffect(uiState.hasLeft, uiState.hasDeclined) {
+        if (uiState.hasLeft || uiState.hasDeclined) onLeft()
     }
 
     val session = uiState.session
@@ -105,7 +105,11 @@ fun ManageSessionScreen(
 
             else -> {
                 Text(
-                    text = if (uiState.isOrganiser) "Manage session" else "Session details",
+                    text = when {
+                        uiState.isOrganiser -> "Manage session"
+                        uiState.pendingInvite != null -> "Session invite"
+                        else -> "Session details"
+                    },
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
@@ -180,6 +184,27 @@ fun ManageSessionScreen(
                             onClick = { pendingConfirmation = PendingConfirmation.CANCEL },
                             enabled = !uiState.isWorking
                         )
+                    } else if (uiState.pendingInvite != null) {
+                        Text(
+                            text = "You've been invited to this session.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SecondaryButton(
+                                text = "Decline",
+                                onClick = viewModel::declineInvite,
+                                enabled = !uiState.isWorking,
+                                modifier = Modifier.weight(1f)
+                            )
+                            DefaultButton(
+                                text = "Accept",
+                                onClick = viewModel::acceptInvite,
+                                enabled = !uiState.isWorking,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     } else if (uiState.isParticipant) {
                         DestructiveButton(
                             text = "Leave session",

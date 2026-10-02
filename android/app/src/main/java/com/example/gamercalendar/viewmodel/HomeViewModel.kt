@@ -35,9 +35,7 @@ data class HomeUiState(
     val invites: List<InviteListItem> = emptyList(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
-    val error: String? = null,
-    val respondingInviteIds: Set<String> = emptySet(),
-    val inviteError: String? = null
+    val error: String? = null
 )
 
 class HomeViewModel : ViewModel() {
@@ -56,7 +54,7 @@ class HomeViewModel : ViewModel() {
     private fun load(isRefresh: Boolean) {
         viewModelScope.launch {
             _uiState.update {
-                if (isRefresh) it.copy(isRefreshing = true, error = null, inviteError = null)
+                if (isRefresh) it.copy(isRefreshing = true, error = null)
                 else it.copy(isLoading = true, error = null)
             }
             try {
@@ -119,41 +117,6 @@ class HomeViewModel : ViewModel() {
             }
             .awaitAll()
             .filterNotNull()
-    }
-
-    fun acceptInvite(invite: SessionInvite) = respond(invite, accept = true)
-
-    fun declineInvite(invite: SessionInvite) = respond(invite, accept = false)
-
-    private fun respond(invite: SessionInvite, accept: Boolean) {
-        if (invite.id in _uiState.value.respondingInviteIds) return
-
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(respondingInviteIds = it.respondingInviteIds + invite.id, inviteError = null)
-            }
-            try {
-                if (accept) repository.acceptInvite(invite) else repository.declineInvite(invite)
-                _uiState.update { state ->
-                    state.copy(
-                        invites = state.invites.filterNot { it.invite.id == invite.id },
-                        respondingInviteIds = state.respondingInviteIds - invite.id
-                    )
-                }
-                // The accepted session now belongs under upcoming sessions.
-                if (accept) load(isRefresh = false)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                val fallback = if (accept) "Couldn't accept invite" else "Couldn't decline invite"
-                _uiState.update {
-                    it.copy(
-                        respondingInviteIds = it.respondingInviteIds - invite.id,
-                        inviteError = apiErrorDetail(e) ?: e.message ?: fallback
-                    )
-                }
-            }
-        }
     }
 
     private fun GamingSession.toListItem(gameNames: Map<String, String>): SessionListItem? {

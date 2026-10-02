@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gamercalendar.data.model.GamingSession
+import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionParticipant
 import com.example.gamercalendar.data.model.SessionStatus
 import com.example.gamercalendar.data.model.User
@@ -13,6 +14,7 @@ import com.example.gamercalendar.data.repository.UserRepository
 import com.example.gamercalendar.ui.navigation.Routes
 import com.example.gamercalendar.util.SessionTime
 import com.example.gamercalendar.util.apiErrorDetail
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,10 +41,14 @@ data class ManageSessionUiState(
     val isLoadingFriends: Boolean = false,
     val friendsError: String? = null,
 
+    /** The current user's pending invite to this session, if any. */
+    val pendingInvite: SessionInvite? = null,
+
     val isWorking: Boolean = false,
     val actionError: String? = null,
     val message: String? = null,
-    val hasLeft: Boolean = false
+    val hasLeft: Boolean = false,
+    val hasDeclined: Boolean = false
 ) {
     val isOrganiser: Boolean
         get() = session != null && session.organiser_id == currentUserId
@@ -79,6 +85,64 @@ class ManageSessionViewModel(
     fun load() {
         loadSession()
         loadParticipants()
+        loadPendingInvite()
+    }
+
+    private fun loadPendingInvite() {
+        viewModelScope.launch {
+            try {
+                val invite = sessionRepository.getSessionInvites().firstOrNull { it.session_id == sessionId }
+                _uiState.update { it.copy(pendingInvite = invite) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Without the invite the screen still works; the user just can't respond from here.
+            }
+        }
+    }
+
+    fun acceptInvite() {
+        val invite = _uiState.value.pendingInvite ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, actionError = null) }
+            try {
+                sessionRepository.acceptInvite(invite)
+                _uiState.update {
+                    it.copy(isWorking = false, pendingInvite = null, message = "You joined the session")
+                }
+                // Refresh the player count and list now that the user is in.
+                loadSession()
+                loadParticipants()
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(isWorking = false, actionError = errorMessage(e, "Couldn't accept invite"))
+                }
+            }
+        }
+    }
+
+    fun declineInvite() {
+        val invite = _uiState.value.pendingInvite ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, actionError = null) }
+            try {
+                sessionRepository.declineInvite(invite)
+                _uiState.update {
+                    it.copy(
+                        isWorking = false,
+                        pendingInvite = null,
+                        hasDeclined = true,
+                        message = "Invite declined"
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(isWorking = false, actionError = errorMessage(e, "Couldn't decline invite"))
+                }
+            }
+        }
     }
 
     private fun loadSession() {
