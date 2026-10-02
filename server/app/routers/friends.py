@@ -39,6 +39,35 @@ def _require_user(db: Session, user_id: UUID) -> User:
     return user
 
 
+def _build_request_responses(
+    db: Session,
+    requests: list[FriendRequest],
+) -> list[FriendRequestResponse]:
+    user_ids = {request.sender_id for request in requests} | {
+        request.receiver_id for request in requests
+    }
+    users_by_id: dict[UUID, User] = {}
+    if user_ids:
+        users = db.scalars(select(User).where(User.id.in_(user_ids))).all()
+        users_by_id = {user.id: user for user in users}
+
+    def _user_response(user_id: UUID) -> UserResponse | None:
+        user = users_by_id.get(user_id)
+        return UserResponse.model_validate(user) if user is not None else None
+
+    return [
+        FriendRequestResponse(
+            id=request.id,
+            sender_id=request.sender_id,
+            receiver_id=request.receiver_id,
+            created_at=request.created_at,
+            sender=_user_response(request.sender_id),
+            receiver=_user_response(request.receiver_id),
+        )
+        for request in requests
+    ]
+
+
 @router.get(
     "/",
     response_model=list[UserResponse],
@@ -65,7 +94,7 @@ def send_friend_request(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_user(db, body.receiver_id)
+    receiver = _require_user(db, body.receiver_id)
 
     if current_user.id == body.receiver_id:
         raise HTTPException(
@@ -110,7 +139,14 @@ def send_friend_request(
     db.add(request)
     db.commit()
     db.refresh(request)
-    return request
+    return FriendRequestResponse(
+        id=request.id,
+        sender_id=request.sender_id,
+        receiver_id=request.receiver_id,
+        created_at=request.created_at,
+        sender=UserResponse.model_validate(current_user),
+        receiver=UserResponse.model_validate(receiver),
+    )
 
 
 @router.get(
@@ -142,7 +178,8 @@ def list_friend_requests(
             )
         )
 
-    return db.scalars(statement).all()
+    requests = db.scalars(statement).all()
+    return _build_request_responses(db, list(requests))
 
 
 @router.post(

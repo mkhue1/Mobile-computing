@@ -21,8 +21,11 @@ import com.example.gamercalendar.ui.components.app.AppBottomBar
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.app.AppTopBar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
+import com.example.gamercalendar.ui.screens.AddFriendScreen
 import com.example.gamercalendar.ui.screens.CardTestScreen
 import com.example.gamercalendar.ui.screens.CreateSessionScreen
+import com.example.gamercalendar.ui.screens.FriendsHubScreen
+import com.example.gamercalendar.ui.screens.GroupDetailScreen
 import com.example.gamercalendar.ui.screens.HomeScreen
 import com.example.gamercalendar.ui.screens.ManageSessionScreen
 import com.example.gamercalendar.ui.screens.UsersScreen
@@ -42,7 +45,7 @@ fun AppNavigation(
         topBar = {
             AppTopBar(
                 onProfileClick = {
-                    navController.navigate(Routes.ITEM_5) {
+                    navController.navigate(Routes.USERS) {
                         launchSingleTop = true
                         restoreState = true
 
@@ -57,16 +60,16 @@ fun AppNavigation(
             AppBottomBar(
                 currentRoute = currentRoute,
                 onNavigate = { route ->
-                    // Home always resets to its root; saving/restoring state here would bring back
-                    // screens stacked on top of it, such as Create session.
-                    val isHome = route == Routes.ITEM_1
+                    // Home and Friends always reset to their root; saving/restoring state here would
+                    // bring back screens stacked on top of them, such as Create session or Add friend.
+                    val resetsToRoot = route == Routes.ITEM_1 || route == Routes.FRIENDS_HUB
 
                     navController.navigate(route) {
                         launchSingleTop = true
-                        restoreState = !isHome
+                        restoreState = !resetsToRoot
 
                         popUpTo(Routes.ITEM_1) {
-                            saveState = !isHome
+                            saveState = !resetsToRoot
                         }
                     }
                 }
@@ -163,6 +166,32 @@ fun AppNavigation(
             composable(Routes.ITEM_5) {
                 PlaceholderScreen(
                     text = "Item 5"
+                )
+            }
+
+            composable(Routes.FRIENDS_HUB) {
+                FriendsHubScreen(
+                    onAddFriendClick = {
+                        navController.navigate(Routes.ADD_FRIEND)
+                    },
+                    onGroupClick = { groupId ->
+                        navController.navigate(Routes.groupDetail(groupId))
+                    }
+                )
+            }
+
+            composable(Routes.ADD_FRIEND) {
+                AddFriendScreen(
+                    onDone = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Routes.GROUP_DETAIL,
+                arguments = listOf(navArgument(Routes.ARG_GROUP_ID) { type = NavType.StringType })
+            ) {
+                GroupDetailScreen(
+                    onLeft = { navController.popBackStack() }
                 )
             }
         }

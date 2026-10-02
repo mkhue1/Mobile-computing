@@ -1,6 +1,7 @@
 package com.example.gamercalendar.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
@@ -29,9 +30,9 @@ val bottomNavItems = listOf(
         icon = Icons.Default.Person
     ),
     BottomNavItem(
-        route = Routes.ITEM_4,
-        label = "Item 4",
-        icon = Icons.Default.Star
+        route = Routes.FRIENDS_HUB,
+        label = "Friends",
+        icon = Icons.Default.Group
     ),
     BottomNavItem(
         route = Routes.ITEM_5,

@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.user import UserResponse
+
 
 class FriendRequestCreate(BaseModel):
     receiver_id: UUID
@@ -13,6 +15,8 @@ class FriendRequestResponse(BaseModel):
     sender_id: UUID
     receiver_id: UUID
     created_at: datetime
+    sender: UserResponse | None = None
+    receiver: UserResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

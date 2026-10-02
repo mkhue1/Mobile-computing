@@ -1,0 +1,166 @@
+package com.example.gamercalendar.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.gamercalendar.data.model.FriendRequestResponse
+import com.example.gamercalendar.data.model.User
+import com.example.gamercalendar.data.model.UserGroup
+import com.example.gamercalendar.data.repository.FriendRepository
+import com.example.gamercalendar.data.repository.GroupRepository
+import com.example.gamercalendar.util.apiErrorDetail
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+data class FriendRequestUi(
+    val request: FriendRequestResponse,
+    val otherUser: User?
+)
+
+data class FriendsHubUiState(
+    val friends: List<User> = emptyList(),
+    val incomingRequests: List<FriendRequestUi> = emptyList(),
+    val outgoingRequests: List<FriendRequestUi> = emptyList(),
+    val groups: List<UserGroup> = emptyList(),
+    val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
+    val error: String? = null,
+    val isWorking: Boolean = false,
+    val actionError: String? = null
+)
+
+class FriendsHubViewModel : ViewModel() {
+
+    private val repository = FriendRepository()
+    private val groupRepository = GroupRepository()
+
+    private val _uiState = MutableStateFlow(FriendsHubUiState(isLoading = true))
+    val uiState: StateFlow<FriendsHubUiState> = _uiState.asStateFlow()
+
+    /** Background load, e.g. when the screen is shown. */
+    fun load() = load(isRefresh = false)
+
+    /** User-initiated pull to refresh. */
+    fun refresh() = load(isRefresh = true)
+
+    private fun load(isRefresh: Boolean) {
+        viewModelScope.launch {
+            _uiState.update {
+                if (isRefresh) it.copy(isRefreshing = true, error = null)
+                else it.copy(isLoading = true, error = null)
+            }
+            try {
+                coroutineScope {
+                    val friendsDeferred = async { repository.getFriends() }
+                    val incomingDeferred = async { repository.getFriendRequests("incoming") }
+                    val outgoingDeferred = async { repository.getFriendRequests("outgoing") }
+                    val groupsDeferred = async { groupRepository.getGroups() }
+
+                    val friends = friendsDeferred.await()
+                    val incoming = incomingDeferred.await()
+                    val outgoing = outgoingDeferred.await()
+                    val groups = groupsDeferred.await()
+
+                    _uiState.update {
+                        it.copy(
+                            friends = friends,
+                            incomingRequests = incoming.map { req ->
+                                FriendRequestUi(request = req, otherUser = req.sender)
+                            },
+                            outgoingRequests = outgoing.map { req ->
+                                FriendRequestUi(request = req, otherUser = req.receiver)
+                            },
+                            groups = groups,
+                            isLoading = false,
+                            isRefreshing = false
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        isRefreshing = false,
+                        error = apiErrorDetail(e) ?: e.message ?: "Couldn't load friends"
+                    )
+                }
+            }
+        }
+    }
+
+    fun removeFriend(friendId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, actionError = null) }
+            try {
+                repository.removeFriend(friendId)
+                load(isRefresh = true)
+                _uiState.update { it.copy(isWorking = false) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isWorking = false,
+                        actionError = apiErrorDetail(e) ?: e.message ?: "Couldn't remove friend"
+                    )
+                }
+            }
+        }
+    }
+
+    fun acceptRequest(requestId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, actionError = null) }
+            try {
+                repository.acceptFriendRequest(requestId)
+                load(isRefresh = true)
+                _uiState.update { it.copy(isWorking = false) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isWorking = false,
+                        actionError = apiErrorDetail(e) ?: e.message ?: "Couldn't accept request"
+                    )
+                }
+            }
+        }
+    }
+
+    fun createGroup(name: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, actionError = null) }
+            try {
+                groupRepository.createGroup(name)
+                load(isRefresh = true)
+                _uiState.update { it.copy(isWorking = false) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isWorking = false,
+                        actionError = apiErrorDetail(e) ?: e.message ?: "Couldn't create group"
+                    )
+                }
+            }
+        }
+    }
+
+    fun declineRequest(requestId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, actionError = null) }
+            try {
+                repository.declineFriendRequest(requestId)
+                load(isRefresh = true)
+                _uiState.update { it.copy(isWorking = false) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isWorking = false,
+                        actionError = apiErrorDetail(e) ?: e.message ?: "Couldn't decline request"
+                    )
+                }
+            }
+        }
+    }
+}

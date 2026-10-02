@@ -1,7 +1,15 @@
 package com.example.gamercalendar.data.api
 
+import com.example.gamercalendar.data.model.FriendRequestCreate
+import com.example.gamercalendar.data.model.FriendRequestResponse
+import com.example.gamercalendar.data.model.FriendshipResponse
 import com.example.gamercalendar.data.model.Game
 import com.example.gamercalendar.data.model.GamingSession
+import com.example.gamercalendar.data.model.GroupCreate
+import com.example.gamercalendar.data.model.GroupDetailResponse
+import com.example.gamercalendar.data.model.GroupMemberAdd
+import com.example.gamercalendar.data.model.GroupMemberResponse
+import com.example.gamercalendar.data.model.GroupUpdate
 import com.example.gamercalendar.data.model.InviteCreate
 import com.example.gamercalendar.data.model.LoginRequest
 import com.example.gamercalendar.data.model.SessionCreate
@@ -12,15 +20,21 @@ import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserCreate
 import com.example.gamercalendar.data.model.UserGroup
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface ApiService {
 
     @GET("users/")
-    suspend fun getUsers(): List<User>
+    suspend fun getUsers(
+        @Query("search") search: String? = null,
+        @Query("limit") limit: Int? = null
+    ): List<User>
 
     @POST("users/")
     suspend fun createUser(
@@ -38,11 +52,69 @@ interface ApiService {
     @GET("friends/")
     suspend fun getFriends(): List<User>
 
+    @POST("friends/requests")
+    suspend fun sendFriendRequest(
+        @Body request: FriendRequestCreate
+    ): FriendRequestResponse
+
+    @GET("friends/requests")
+    suspend fun getFriendRequests(
+        @Query("direction") direction: String
+    ): List<FriendRequestResponse>
+
+    @POST("friends/requests/{requestId}/accept")
+    suspend fun acceptFriendRequest(
+        @Path("requestId") requestId: String
+    ): FriendshipResponse
+
+    @POST("friends/requests/{requestId}/decline")
+    suspend fun declineFriendRequest(
+        @Path("requestId") requestId: String
+    )
+
+    @DELETE("friends/{friendId}")
+    suspend fun removeFriend(
+        @Path("friendId") friendId: String
+    )
+
     @GET("games/")
     suspend fun getGames(): List<Game>
 
     @GET("groups/")
     suspend fun getGroups(): List<UserGroup>
+
+    @POST("groups/")
+    suspend fun createGroup(
+        @Body group: GroupCreate
+    ): GroupDetailResponse
+
+    @GET("groups/{groupId}")
+    suspend fun getGroup(
+        @Path("groupId") groupId: String
+    ): GroupDetailResponse
+
+    @PATCH("groups/{groupId}")
+    suspend fun updateGroup(
+        @Path("groupId") groupId: String,
+        @Body group: GroupUpdate
+    ): UserGroup
+
+    @DELETE("groups/{groupId}")
+    suspend fun deleteGroup(
+        @Path("groupId") groupId: String
+    )
+
+    @POST("groups/{groupId}/members")
+    suspend fun addGroupMember(
+        @Path("groupId") groupId: String,
+        @Body member: GroupMemberAdd
+    ): GroupMemberResponse
+
+    @DELETE("groups/{groupId}/members/{memberId}")
+    suspend fun removeGroupMember(
+        @Path("groupId") groupId: String,
+        @Path("memberId") memberId: String
+    )
 
     @GET("sessions/")
     suspend fun getSessions(): List<GamingSession>
