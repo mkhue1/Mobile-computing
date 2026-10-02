@@ -6,6 +6,7 @@ import com.example.gamercalendar.data.model.GamingSession
 import com.example.gamercalendar.data.model.InviteAction
 import com.example.gamercalendar.data.model.InviteActionResponse
 import com.example.gamercalendar.data.model.InviteCreate
+import com.example.gamercalendar.data.model.SentSessionInvite
 import com.example.gamercalendar.data.model.SessionCancelResponse
 import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionInvite
@@ -58,6 +59,10 @@ class SessionRepository {
 
     suspend fun getSessionInvites(): List<SessionInvite> {
         return ApiClient.api.getSessionInvites()
+    }
+
+    suspend fun getSentInvites(sessionId: String): List<SentSessionInvite> {
+        return ApiClient.api.getSentSessionInvites(sessionId)
     }
 
     suspend fun acceptInvite(invite: SessionInvite): InviteActionResponse {

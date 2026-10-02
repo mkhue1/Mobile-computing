@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gamercalendar.data.model.GamingSession
+import com.example.gamercalendar.data.model.SentSessionInvite
 import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionParticipant
 import com.example.gamercalendar.data.model.SessionStatus
@@ -44,6 +45,9 @@ data class ManageSessionUiState(
     /** The current user's pending invite to this session, if any. */
     val pendingInvite: SessionInvite? = null,
 
+    /** Pending invites the organiser has sent; only loaded for the organiser. */
+    val sentInvites: List<SentSessionInvite> = emptyList(),
+
     val isWorking: Boolean = false,
     val actionError: String? = null,
     val message: String? = null,
@@ -59,11 +63,11 @@ data class ManageSessionUiState(
     val isCancelled: Boolean
         get() = session?.status == SessionStatus.CANCELLED
 
-    /** Friends who aren't already in the session. */
+    /** Friends who aren't already in the session or waiting on an invite to it. */
     val invitableFriends: List<User>
         get() {
-            val participantIds = participants.map { it.user.id }.toSet()
-            return friends.filter { it.id !in participantIds }
+            val excludedIds = participants.map { it.user.id }.toSet() + sentInvites.map { it.receiver.id }
+            return friends.filter { it.id !in excludedIds }
         }
 }
 
@@ -86,6 +90,19 @@ class ManageSessionViewModel(
         loadSession()
         loadParticipants()
         loadPendingInvite()
+    }
+
+    private fun loadSentInvites() {
+        viewModelScope.launch {
+            try {
+                val invites = sessionRepository.getSentInvites(sessionId)
+                _uiState.update { it.copy(sentInvites = invites) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // The pending list is supplementary; the rest of the screen works without it.
+            }
+        }
     }
 
     private fun loadPendingInvite() {
@@ -165,6 +182,7 @@ class ManageSessionViewModel(
                         currentUserId = me.id
                     )
                 }
+                if (session.organiser_id == me.id) loadSentInvites()
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(isLoading = false, error = errorMessage(e, "Couldn't load session"))
@@ -236,6 +254,7 @@ class ManageSessionViewModel(
             ).joinToString(", ")
 
             _uiState.update { it.copy(isWorking = false, message = message) }
+            loadSentInvites()
         }
     }
 
@@ -248,6 +267,7 @@ class ManageSessionViewModel(
                     it.copy(
                         isWorking = false,
                         session = it.session?.copy(status = SessionStatus.CANCELLED),
+                        sentInvites = emptyList(),
                         message = "Session cancelled"
                     )
                 }

@@ -14,6 +14,7 @@ import com.example.gamercalendar.data.model.InviteAction
 import com.example.gamercalendar.data.model.InviteActionResponse
 import com.example.gamercalendar.data.model.InviteCreate
 import com.example.gamercalendar.data.model.LoginRequest
+import com.example.gamercalendar.data.model.SentSessionInvite
 import com.example.gamercalendar.data.model.SessionCancelResponse
 import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionInvite
@@ -160,6 +161,11 @@ interface ApiService {
 
     @GET("sessions/invites")
     suspend fun getSessionInvites(): List<SessionInvite>
+
+    @GET("sessions/{sessionId}/invites")
+    suspend fun getSentSessionInvites(
+        @Path("sessionId") sessionId: String
+    ): List<SentSessionInvite>
 
     @POST("sessions/{sessionId}/accept")
     suspend fun acceptSessionInvite(

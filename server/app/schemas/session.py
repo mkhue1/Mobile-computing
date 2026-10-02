@@ -111,6 +111,9 @@ class InviteResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class SentInviteResponse(InviteResponse):
+    receiver: UserResponse
+
 class InviteAccept(BaseModel):
     invite_id: UUID
 

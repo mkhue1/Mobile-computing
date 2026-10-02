@@ -790,6 +790,59 @@ def test_invite_rejects_mismatched_session_ids(
     assert response.status_code == 400
 
 
+# --- GET /sessions/{session_id}/invites ---------------------------------------
+
+
+def test_organiser_sees_pending_invites(client, auth_headers, invited):
+    organiser, invitee, session, invite = invited
+
+    response = client.get(f"/sessions/{session['id']}/invites", headers=auth_headers(organiser))
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [i["id"] for i in body] == [invite["id"]]
+    assert body[0]["receiver"]["id"] == str(invitee.id)
+    assert body[0]["receiver"]["username"] == "invitee"
+
+
+@pytest.mark.parametrize("response_route", ["accept", "decline"])
+def test_sent_invites_exclude_answered(client, auth_headers, invited, response_route):
+    organiser, invitee, session, invite = invited
+    client.post(
+        f"/sessions/{session['id']}/{response_route}",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    response = client.get(f"/sessions/{session['id']}/invites", headers=auth_headers(organiser))
+
+    assert response.json() == []
+
+
+def test_only_organiser_sees_sent_invites(client, auth_headers, invited):
+    _, invitee, session, _ = invited
+
+    response = client.get(f"/sessions/{session['id']}/invites", headers=auth_headers(invitee))
+
+    assert response.status_code == 403
+
+
+def test_sent_invites_of_hidden_session(client, make_user, auth_headers, create_session):
+    session = create_session(make_user("organiser"), visibility="private")
+
+    response = client.get(
+        f"/sessions/{session['id']}/invites", headers=auth_headers(make_user("stranger"))
+    )
+
+    assert response.status_code == 404
+
+
+def test_sent_invites_of_unknown_session(client, make_user, auth_headers):
+    response = client.get(f"/sessions/{uuid4()}/invites", headers=auth_headers(make_user()))
+
+    assert response.status_code == 404
+
+
 # --- GET /sessions/invites ----------------------------------------------------
 
 

@@ -101,6 +101,14 @@ data class SessionInvite(
     val responded_at: String?
 )
 
+data class SentSessionInvite(
+    val id: String,
+    val session_id: String,
+    val receiver: User,
+    val status: InviteStatus,
+    val created_at: String
+)
+
 data class InviteAction(
     val invite_id: String
 )

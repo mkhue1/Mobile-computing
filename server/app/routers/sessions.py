@@ -9,7 +9,7 @@ from app.helpers.session import can_view_session
 from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionVisibility, InviteStatus
 from app.models.user import User
 from app.models.user_group import UserGroup, UserGroupMember
-from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, ParticipantResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
+from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, ParticipantResponse, SentInviteResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
 from app.schemas.user import UserResponse
 from app.security import get_current_user
 
@@ -419,6 +419,46 @@ def get_participants(
     return [
         ParticipantResponse(user=UserResponse.model_validate(user), joined_at=participant.joined_at)
         for participant, user in rows
+    ]
+
+
+@router.get(
+    "/{session_id}/invites",
+    response_model=list[SentInviteResponse],
+)
+def get_sent_invites(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session = db.get(GamingSession, session_id)
+    if session is None or not can_view_session(db, session, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} does not exist",
+        )
+    if current_user.id != session.organiser_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the organiser can see a session's invites",
+        )
+
+    rows = db.execute(
+        select(SessionInvite, User)
+        .join(User, User.id == SessionInvite.receiver_id)
+        .where(
+            SessionInvite.session_id == session_id,
+            SessionInvite.status == InviteStatus.PENDING,
+        )
+        .order_by(SessionInvite.created_at)
+    ).all()
+
+    return [
+        SentInviteResponse(
+            **InviteResponse.model_validate(invite).model_dump(),
+            receiver=UserResponse.model_validate(user),
+        )
+        for invite, user in rows
     ]
 
 

@@ -158,6 +158,22 @@ fun ManageSessionScreen(
                     onRetry = viewModel::loadParticipants
                 )
 
+                if (uiState.isOrganiser && uiState.sentInvites.isNotEmpty()) {
+                    SectionTitle(title = "Invited", trailing = "${uiState.sentInvites.size}")
+
+                    AppCard {
+                        uiState.sentInvites.forEachIndexed { index, invite ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                                )
+                            }
+                            InvitedRow(user = invite.receiver)
+                        }
+                    }
+                }
+
                 uiState.actionError?.let {
                     ErrorText(text = it)
                 }
@@ -364,6 +380,28 @@ private fun PlayerRow(
 }
 
 @Composable
+private fun InvitedRow(user: User) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Avatar(name = user.username)
+
+        Text(
+            text = user.username,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+
+        Tag(text = "Pending", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 private fun Avatar(name: String) {
     Box(
         modifier = Modifier
@@ -470,7 +508,7 @@ private fun InviteFriendsSheet(
 
                 friends.isEmpty() -> EmptyState(
                     title = "No friends to invite",
-                    message = "Everyone on your friends list is already in this session."
+                    message = "Everyone on your friends list is already in this session or invited."
                 )
 
                 else -> {
