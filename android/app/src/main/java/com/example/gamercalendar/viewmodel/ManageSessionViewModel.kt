@@ -47,6 +47,9 @@ data class ManageSessionUiState(
     val isOrganiser: Boolean
         get() = session != null && session.organiser_id == currentUserId
 
+    val isParticipant: Boolean
+        get() = participants.any { it.user.id == currentUserId }
+
     val isCancelled: Boolean
         get() = session?.status == SessionStatus.CANCELLED
 
