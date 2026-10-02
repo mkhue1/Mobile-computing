@@ -30,7 +30,7 @@ if not TEST_DB_URL.database.endswith("_test"):
     )
 
 os.environ["DATABASE_URL"] = TEST_DB_URL.render_as_string(hide_password=False)
-os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-bytes-long")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,6 +38,8 @@ from fastapi.testclient import TestClient
 from app import models
 from app.database import Base, SessionLocal, engine
 from app.main import app
+from app.helpers.friendship import ordered_friend_pair
+from app.models.friendship import Friendship
 from app.models.game import Game
 from app.models.user import User
 from app.models.user_group import GroupRole, UserGroup, UserGroupMember
@@ -138,3 +140,15 @@ def make_group(db):
         return group
 
     return _make_group
+
+
+@pytest.fixture
+def make_friends(db):
+    def _make_friends(user_a: User, user_b: User) -> Friendship:
+        low, high = ordered_friend_pair(user_a.id, user_b.id)
+        friendship = Friendship(user_id=low, friend_id=high)
+        db.add(friendship)
+        db.commit()
+        return friendship
+
+    return _make_friends
