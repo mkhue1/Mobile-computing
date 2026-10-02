@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.screens
+package com.example.gamercalendar.ui.feature.sessions
 
 import android.text.format.DateFormat
 import android.widget.Toast
@@ -73,8 +73,6 @@ import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.ui.components.inputs.DefaultTextField
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.util.SessionTime
-import com.example.gamercalendar.viewmodel.CreateSessionViewModel
-
 private enum class TimeField { START, END }
 
 @OptIn(ExperimentalMaterial3Api::class)

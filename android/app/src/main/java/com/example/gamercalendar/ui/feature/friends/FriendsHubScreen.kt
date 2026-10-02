@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.screens
+package com.example.gamercalendar.ui.feature.friends
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -34,9 +34,6 @@ import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
-import com.example.gamercalendar.viewmodel.FriendRequestUi
-import com.example.gamercalendar.viewmodel.FriendsHubViewModel
-
 private val TAB_TITLES = listOf("Friends", "Requests", "Groups")
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -1,4 +1,4 @@
-package com.example.gamercalendar.viewmodel
+package com.example.gamercalendar.ui.feature.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

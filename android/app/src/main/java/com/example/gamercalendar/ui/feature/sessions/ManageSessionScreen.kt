@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.screens
+package com.example.gamercalendar.ui.feature.sessions
 
 import android.widget.Toast
 import androidx.compose.foundation.clickable
@@ -56,8 +56,6 @@ import com.example.gamercalendar.ui.components.labels.Avatar
 import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.components.layout.SectionTitle
-import com.example.gamercalendar.viewmodel.ManageSessionViewModel
-
 private enum class PendingConfirmation { CANCEL, LEAVE }
 
 @Composable

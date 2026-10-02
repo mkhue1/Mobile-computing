@@ -1,4 +1,4 @@
-package com.example.gamercalendar.viewmodel
+package com.example.gamercalendar.ui.feature.sessions
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
