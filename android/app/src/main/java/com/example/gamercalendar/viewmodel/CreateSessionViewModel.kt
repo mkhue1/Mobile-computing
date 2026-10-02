@@ -97,8 +97,19 @@ data class CreateSessionUiState(
     val isEditing: Boolean = false,
     val isLoadingSession: Boolean = false,
     val loadError: String? = null,
-    val originalStartEpochMillis: Long? = null
-)
+    val originalStartEpochMillis: Long? = null,
+    val originalVisibility: SessionVisibility? = null
+) {
+    /** A session's group is fixed once created, so editing can't move it into or out of a group. */
+    fun canSelectVisibility(visibility: SessionVisibility): Boolean = when {
+        !isEditing -> true
+        originalVisibility == SessionVisibility.GROUP -> false
+        else -> visibility != SessionVisibility.GROUP
+    }
+
+    val canChangeGroup: Boolean
+        get() = !isEditing
+}
 
 class CreateSessionViewModel(
     savedStateHandle: SavedStateHandle
@@ -160,7 +171,12 @@ class CreateSessionViewModel(
                 )
 
                 _uiState.update {
-                    it.copy(form = form, isLoadingSession = false, originalStartEpochMillis = start)
+                    it.copy(
+                        form = form,
+                        isLoadingSession = false,
+                        originalStartEpochMillis = start,
+                        originalVisibility = session.visibility
+                    )
                 }
             } catch (e: Exception) {
                 _uiState.update {

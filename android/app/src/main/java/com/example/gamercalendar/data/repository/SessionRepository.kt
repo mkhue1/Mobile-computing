@@ -3,7 +3,10 @@ package com.example.gamercalendar.data.repository
 import com.example.gamercalendar.data.api.ApiClient
 import com.example.gamercalendar.data.model.Game
 import com.example.gamercalendar.data.model.GamingSession
+import com.example.gamercalendar.data.model.InviteAction
+import com.example.gamercalendar.data.model.InviteActionResponse
 import com.example.gamercalendar.data.model.InviteCreate
+import com.example.gamercalendar.data.model.SessionCancelResponse
 import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionParticipant
@@ -34,7 +37,7 @@ class SessionRepository {
         return ApiClient.api.updateSession(sessionId, session)
     }
 
-    suspend fun cancelSession(sessionId: String): GamingSession {
+    suspend fun cancelSession(sessionId: String): SessionCancelResponse {
         return ApiClient.api.cancelSession(sessionId)
     }
 
@@ -51,5 +54,17 @@ class SessionRepository {
             sessionId,
             InviteCreate(session_id = sessionId, receiver_id = userId)
         )
+    }
+
+    suspend fun getSessionInvites(): List<SessionInvite> {
+        return ApiClient.api.getSessionInvites()
+    }
+
+    suspend fun acceptInvite(invite: SessionInvite): InviteActionResponse {
+        return ApiClient.api.acceptSessionInvite(invite.session_id, InviteAction(invite_id = invite.id))
+    }
+
+    suspend fun declineInvite(invite: SessionInvite): InviteActionResponse {
+        return ApiClient.api.declineSessionInvite(invite.session_id, InviteAction(invite_id = invite.id))
     }
 }

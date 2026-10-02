@@ -9,7 +9,7 @@ from app.helpers.session import can_view_session
 from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionVisibility, InviteStatus
 from app.models.user import User
 from app.models.user_group import UserGroup, UserGroupMember
-from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, SessionCancelResponse, SessionResponse, SessionCreate
+from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
 from app.security import get_current_user
 
 
@@ -19,6 +19,20 @@ router = APIRouter(
     prefix="/sessions",
     tags=["sessions"],
 )
+
+
+def _require_group_membership(db: Session, group_id: UUID, user_id: UUID) -> None:
+    if db.get(UserGroup, group_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Group {group_id} does not exist",
+        )
+
+    if db.get(UserGroupMember, (group_id, user_id)) is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only create sessions for groups you are a member of",
+        )
 
 
 @router.get(
@@ -60,18 +74,7 @@ def create_session(
         )
 
     if session.group_id is not None:
-        if db.get(UserGroup, session.group_id) is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Group {session.group_id} does not exist",
-            )
-
-        membership = db.get(UserGroupMember, (session.group_id, current_user.id))
-        if membership is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only create sessions for groups you are a member of",
-            )
+        _require_group_membership(db, session.group_id, current_user.id)
 
     new_session = GamingSession(
         organiser_id=current_user.id,
@@ -113,8 +116,8 @@ def create_session(
 
     return new_session
 
-@router.patch(
-    "/{session_id}",
+@router.post(
+    "/{session_id}/cancel",
     response_model=SessionCancelResponse,
 )
 def cancel_session(
@@ -314,4 +317,54 @@ def get_session(
             detail=f"Session {session_id} does not exist",
         )
 
+    return session
+
+
+@router.patch(
+    "/{session_id}",
+    response_model=SessionResponse,
+)
+def update_session(
+    session_id: UUID,
+    changes: SessionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session = db.scalars(
+        select(GamingSession).where(GamingSession.id == session_id).with_for_update()
+    ).one_or_none()
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Session {session_id} does not exist")
+    if current_user.id != session.organiser_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Only the organiser can edit a session")
+    if session.status != SessionStatus.OPEN:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is {session.status.value} and can't be edited")
+
+    updates = changes.model_dump(exclude_unset=True)
+
+    start_at = updates.get("start_at", session.start_at)
+    end_at = updates.get("end_at", session.end_at)
+    if end_at <= start_at:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="End time must be after start time")
+
+    # Group members are invited when the session is created, so moving it to, from or between
+    # groups would leave those invites out of sync with the group.
+    if updates.get("group_id", session.group_id) != session.group_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="A session's group can't be changed")
+    visibility = updates.get("visibility", session.visibility)
+    if visibility != session.visibility and SessionVisibility.GROUP in (visibility, session.visibility):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="A session can't be moved into or out of a group")
+
+    player_limit = updates.get("player_limit", session.player_limit)
+    if player_limit is not None and player_limit < session.player_count:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"Player limit can't be below the current {session.player_count} players",
+        )
+
+    for field, value in updates.items():
+        setattr(session, field, value)
+
+    db.commit()
+    db.refresh(session)
     return session

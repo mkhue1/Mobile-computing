@@ -10,8 +10,11 @@ import com.example.gamercalendar.data.model.GroupDetailResponse
 import com.example.gamercalendar.data.model.GroupMemberAdd
 import com.example.gamercalendar.data.model.GroupMemberResponse
 import com.example.gamercalendar.data.model.GroupUpdate
+import com.example.gamercalendar.data.model.InviteAction
+import com.example.gamercalendar.data.model.InviteActionResponse
 import com.example.gamercalendar.data.model.InviteCreate
 import com.example.gamercalendar.data.model.LoginRequest
+import com.example.gamercalendar.data.model.SessionCancelResponse
 import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionParticipant
@@ -24,7 +27,6 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
-import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -129,7 +131,7 @@ interface ApiService {
         @Body session: SessionCreate
     ): GamingSession
 
-    @PUT("sessions/{sessionId}")
+    @PATCH("sessions/{sessionId}")
     suspend fun updateSession(
         @Path("sessionId") sessionId: String,
         @Body session: SessionCreate
@@ -138,7 +140,7 @@ interface ApiService {
     @POST("sessions/{sessionId}/cancel")
     suspend fun cancelSession(
         @Path("sessionId") sessionId: String
-    ): GamingSession
+    ): SessionCancelResponse
 
     @POST("sessions/{sessionId}/leave")
     suspend fun leaveSession(
@@ -155,4 +157,19 @@ interface ApiService {
         @Path("sessionId") sessionId: String,
         @Body invite: InviteCreate
     ): SessionInvite
+
+    @GET("sessions/invites")
+    suspend fun getSessionInvites(): List<SessionInvite>
+
+    @POST("sessions/{sessionId}/accept")
+    suspend fun acceptSessionInvite(
+        @Path("sessionId") sessionId: String,
+        @Body invite: InviteAction
+    ): InviteActionResponse
+
+    @POST("sessions/{sessionId}/decline")
+    suspend fun declineSessionInvite(
+        @Path("sessionId") sessionId: String,
+        @Body invite: InviteAction
+    ): InviteActionResponse
 }

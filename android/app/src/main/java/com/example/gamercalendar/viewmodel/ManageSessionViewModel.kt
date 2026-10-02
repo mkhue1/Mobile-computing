@@ -176,9 +176,13 @@ class ManageSessionViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isWorking = true, actionError = null) }
             try {
-                val session = sessionRepository.cancelSession(sessionId)
+                sessionRepository.cancelSession(sessionId)
                 _uiState.update {
-                    it.copy(isWorking = false, session = session, message = "Session cancelled")
+                    it.copy(
+                        isWorking = false,
+                        session = it.session?.copy(status = SessionStatus.CANCELLED),
+                        message = "Session cancelled"
+                    )
                 }
             } catch (e: Exception) {
                 _uiState.update {

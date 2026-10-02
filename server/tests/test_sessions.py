@@ -231,13 +231,268 @@ def test_get_unknown_session(client, make_user, auth_headers):
     assert response.status_code == 404
 
 
-# --- PATCH /sessions/{session_id} (cancel) ------------------------------------
+# --- PATCH /sessions/{session_id} ---------------------------------------------
+
+
+def test_update_session(client, db, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser, description="Bring snacks")
+    new_start = datetime.now(timezone.utc) + timedelta(days=3)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={
+            "title": "Saturday night",
+            "start_at": new_start.isoformat(),
+            "end_at": (new_start + timedelta(hours=4)).isoformat(),
+            "player_limit": 6,
+        },
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["title"] == "Saturday night"
+    assert datetime.fromisoformat(body["start_at"]) == new_start
+    assert body["player_limit"] == 6
+    # Fields left out of the request are unchanged.
+    assert body["description"] == "Bring snacks"
+    assert body["visibility"] == "private"
+
+    stored = db.get(GamingSession, UUID(session["id"]))
+    assert stored.title == "Saturday night"
+
+
+def test_update_session_null_clears_optional_field(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    session = create_session(organiser, description="Bring snacks", player_limit=4)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"description": None, "player_limit": None},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["description"] is None
+    assert response.json()["player_limit"] is None
+
+
+def test_update_session_with_full_form(client, make_user, auth_headers, game, create_session):
+    """The app's edit screen sends every field, including nulls, so a create payload must be accepted."""
+    organiser = make_user()
+    session = create_session(organiser)
+    payload = session_payload(
+        game,
+        title=None,
+        description=None,
+        group_id=None,
+        location_name="Alex's place",
+        session_type="in_person",
+        player_limit=None,
+    )
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json=payload, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["title"] is None
+    assert response.json()["session_type"] == "in_person"
+    assert response.json()["location_name"] == "Alex's place"
+
+
+def test_only_organiser_can_update(client, auth_headers, invited):
+    _, invitee, session, _ = invited
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"title": "Hijacked"}, headers=auth_headers(invitee)
+    )
+
+    assert response.status_code == 403
+
+
+def test_update_unknown_session(client, make_user, auth_headers):
+    response = client.patch(
+        f"/sessions/{uuid4()}", json={"title": "Nope"}, headers=auth_headers(make_user())
+    )
+
+    assert response.status_code == 404
+
+
+def test_cannot_update_cancelled_session(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"title": "Back on"}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 409
+
+
+def test_update_rejects_end_before_start(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+    # Only end_at is sent, so it's checked against the stored start time.
+    earlier = datetime.fromisoformat(session["start_at"]) - timedelta(hours=1)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"end_at": earlier.isoformat()},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_rejects_timezone_naive_times(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"start_at": "2030-01-01T18:00:00"},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("field", ["game_id", "start_at", "end_at", "session_type", "visibility"])
+def test_update_rejects_null_required_field(
+    client, make_user, auth_headers, create_session, field
+):
+    organiser = make_user()
+    session = create_session(organiser)
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={field: None}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_rejects_non_positive_player_limit(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    session = create_session(organiser)
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"player_limit": 0}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_player_limit_below_player_count(client, auth_headers, invited):
+    organiser, invitee, session, invite = invited
+    client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"player_limit": 1}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 409
+
+
+def test_update_between_non_group_visibilities(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    session = create_session(organiser, visibility="private")
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"visibility": "public"}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["visibility"] == "public"
+
+
+def test_cannot_move_session_into_group(
+    client, db, make_user, make_group, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    group = make_group(organiser)
+    session = create_session(organiser)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"visibility": "group", "group_id": str(group.id)},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 400
+    assert db.get(GamingSession, UUID(session["id"])).group_id is None
+
+
+@pytest.mark.parametrize("changes", [{"visibility": "public"}, {"visibility": "public", "group_id": None}])
+def test_cannot_move_session_out_of_group(
+    client, make_user, make_group, auth_headers, create_session, changes
+):
+    organiser = make_user("organiser")
+    group = make_group(organiser)
+    session = create_session(organiser, visibility="group", group_id=str(group.id))
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json=changes, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 400
+
+
+def test_cannot_change_session_group(
+    client, make_user, make_group, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    group = make_group(organiser)
+    other_group = make_group(organiser)
+    session = create_session(organiser, visibility="group", group_id=str(group.id))
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"group_id": str(other_group.id)},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_group_session_resending_same_group(
+    client, make_user, make_group, auth_headers, game, create_session
+):
+    """The edit form sends the group back unchanged, which must be accepted."""
+    organiser = make_user("organiser")
+    group = make_group(organiser)
+    session = create_session(organiser, visibility="group", group_id=str(group.id))
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json=session_payload(game, title="Renamed", visibility="group", group_id=str(group.id)),
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["title"] == "Renamed"
+    assert response.json()["group_id"] == str(group.id)
+
+
+# --- POST /sessions/{session_id}/cancel ---------------------------------------
 
 
 def test_cancel_session(client, db, auth_headers, invited):
     organiser, _, session, invite = invited
 
-    response = client.patch(f"/sessions/{session['id']}", headers=auth_headers(organiser))
+    response = client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
 
     assert response.status_code == 200
     assert response.json()["status"] is True
@@ -251,7 +506,7 @@ def test_cancel_session(client, db, auth_headers, invited):
 def test_only_organiser_can_cancel(client, auth_headers, invited):
     _, invitee, session, _ = invited
 
-    response = client.patch(f"/sessions/{session['id']}", headers=auth_headers(invitee))
+    response = client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(invitee))
 
     assert response.status_code == 403
 
@@ -260,14 +515,14 @@ def test_cannot_cancel_twice(client, make_user, auth_headers, create_session):
     organiser = make_user()
     session = create_session(organiser)
 
-    client.patch(f"/sessions/{session['id']}", headers=auth_headers(organiser))
-    response = client.patch(f"/sessions/{session['id']}", headers=auth_headers(organiser))
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+    response = client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
 
     assert response.status_code == 409
 
 
 def test_cancel_unknown_session(client, make_user, auth_headers):
-    response = client.patch(f"/sessions/{uuid4()}", headers=auth_headers(make_user()))
+    response = client.post(f"/sessions/{uuid4()}/cancel", headers=auth_headers(make_user()))
 
     assert response.status_code == 404
 
@@ -402,7 +657,7 @@ def test_cannot_accept_into_full_session(
 
 def test_cannot_accept_invite_to_cancelled_session(client, auth_headers, invited):
     organiser, invitee, session, invite = invited
-    client.patch(f"/sessions/{session['id']}", headers=auth_headers(organiser))
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
 
     response = client.post(
         f"/sessions/{session['id']}/accept",
