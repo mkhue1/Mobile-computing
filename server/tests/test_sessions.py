@@ -231,6 +231,66 @@ def test_get_unknown_session(client, make_user, auth_headers):
     assert response.status_code == 404
 
 
+# --- GET /sessions/{session_id}/participants ----------------------------------
+
+
+def test_get_participants(client, auth_headers, invited):
+    organiser, invitee, session, invite = invited
+    client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    response = client.get(
+        f"/sessions/{session['id']}/participants", headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [p["user"]["id"] for p in body] == [str(organiser.id), str(invitee.id)]
+    assert body[0]["user"]["username"] == "organiser"
+    assert body[0]["joined_at"] is not None
+
+
+def test_participants_exclude_pending_invitees(client, auth_headers, invited):
+    organiser, _, session, _ = invited
+
+    response = client.get(
+        f"/sessions/{session['id']}/participants", headers=auth_headers(organiser)
+    )
+
+    assert [p["user"]["id"] for p in response.json()] == [str(organiser.id)]
+
+
+def test_invitee_can_view_participants(client, auth_headers, invited):
+    _, invitee, session, _ = invited
+
+    response = client.get(
+        f"/sessions/{session['id']}/participants", headers=auth_headers(invitee)
+    )
+
+    assert response.status_code == 200
+
+
+def test_participants_of_private_session_hidden_from_strangers(
+    client, make_user, auth_headers, create_session
+):
+    session = create_session(make_user("organiser"), visibility="private")
+
+    response = client.get(
+        f"/sessions/{session['id']}/participants", headers=auth_headers(make_user("stranger"))
+    )
+
+    assert response.status_code == 404
+
+
+def test_participants_of_unknown_session(client, make_user, auth_headers):
+    response = client.get(f"/sessions/{uuid4()}/participants", headers=auth_headers(make_user()))
+
+    assert response.status_code == 404
+
+
 # --- PATCH /sessions/{session_id} ---------------------------------------------
 
 
@@ -523,6 +583,85 @@ def test_cannot_cancel_twice(client, make_user, auth_headers, create_session):
 
 def test_cancel_unknown_session(client, make_user, auth_headers):
     response = client.post(f"/sessions/{uuid4()}/cancel", headers=auth_headers(make_user()))
+
+    assert response.status_code == 404
+
+
+# --- POST /sessions/{session_id}/leave ----------------------------------------
+
+
+@pytest.fixture
+def joined(client, auth_headers, invited):
+    """Like `invited`, but the invitee has accepted and is a participant."""
+    organiser, invitee, session, invite = invited
+    response = client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+    assert response.status_code == 200, response.text
+    return organiser, invitee, session
+
+
+def test_leave_session(client, db, auth_headers, joined):
+    _, player, session = joined
+
+    response = client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(player))
+
+    assert response.status_code == 204
+    assert db.get(SessionParticipant, (UUID(session["id"]), player.id)) is None
+    assert db.get(GamingSession, UUID(session["id"])).player_count == 1
+    assert client.get("/sessions/", headers=auth_headers(player)).json() == []
+
+
+def test_leaving_private_session_removes_access(client, auth_headers, joined):
+    _, player, session = joined
+
+    client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(player))
+
+    response = client.get(f"/sessions/{session['id']}", headers=auth_headers(player))
+    assert response.status_code == 404
+
+
+def test_organiser_can_reinvite_after_leaving(auth_headers, client, send_invite, joined):
+    organiser, player, session = joined
+    client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(player))
+
+    response = send_invite(organiser, session["id"], player)
+
+    assert response.status_code == 201, response.text
+
+
+def test_organiser_cannot_leave(client, db, auth_headers, joined):
+    organiser, _, session = joined
+
+    response = client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(organiser))
+
+    assert response.status_code == 400
+    assert db.get(SessionParticipant, (UUID(session["id"]), organiser.id)) is not None
+
+
+def test_cannot_leave_session_not_in(client, db, auth_headers, invited):
+    _, invitee, session, invite = invited
+
+    response = client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(invitee))
+
+    assert response.status_code == 404
+    # A pending invite isn't touched by a failed leave.
+    assert db.get(SessionInvite, UUID(invite["id"])).status == InviteStatus.PENDING
+
+
+def test_cannot_leave_cancelled_session(client, auth_headers, joined):
+    organiser, player, session = joined
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    response = client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(player))
+
+    assert response.status_code == 409
+
+
+def test_leave_unknown_session(client, make_user, auth_headers):
+    response = client.post(f"/sessions/{uuid4()}/leave", headers=auth_headers(make_user()))
 
     assert response.status_code == 404
 

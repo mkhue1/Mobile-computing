@@ -3,6 +3,7 @@ from enum import Enum
 from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, model_validator
 from app.models.gaming_session import InviteStatus, SessionType, SessionVisibility, SessionStatus
+from app.schemas.user import UserResponse
 
 class SessionCreate(BaseModel):
     game_id: UUID
@@ -120,6 +121,10 @@ class InviteAcitionResponse(BaseModel):
     status: bool
     message: str
     id: UUID
+
+class ParticipantResponse(BaseModel):
+    user: UserResponse
+    joined_at: datetime
 
 class ParticipantCreate(BaseModel):
     session_id: UUID

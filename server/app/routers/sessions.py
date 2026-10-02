@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func, update
+from sqlalchemy import delete, select, func, update
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,7 +9,8 @@ from app.helpers.session import can_view_session
 from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionVisibility, InviteStatus
 from app.models.user import User
 from app.models.user_group import UserGroup, UserGroupMember
-from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
+from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, ParticipantResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
+from app.schemas.user import UserResponse
 from app.security import get_current_user
 
 
@@ -148,6 +149,38 @@ def cancel_session(
 
     db.commit()
     return SessionCancelResponse(status=True, message="session cancelled", id=session_id)
+
+
+@router.post(
+    "/{session_id}/leave",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def leave_session(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session = db.scalars(
+        select(GamingSession).where(GamingSession.id == session_id).with_for_update()
+    ).one_or_none()
+    participant = db.get(SessionParticipant, (session_id, current_user.id)) if session else None
+    if participant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"You aren't in session {session_id}")
+    if session.organiser_id == current_user.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Organisers can't leave their own session; cancel it instead")
+    if session.status != SessionStatus.OPEN:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is {session.status.value} and can't be left")
+
+    db.delete(participant)
+    session.player_count -= 1
+    # Removing the invite lets the organiser invite them again and stops it granting access to the session.
+    db.execute(
+        delete(SessionInvite).where(
+            SessionInvite.session_id == session_id,
+            SessionInvite.receiver_id == current_user.id,
+        )
+    )
+    db.commit()
 
 
 @router.post(
@@ -318,6 +351,35 @@ def get_session(
         )
 
     return session
+
+
+@router.get(
+    "/{session_id}/participants",
+    response_model=list[ParticipantResponse],
+)
+def get_participants(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session = db.get(GamingSession, session_id)
+    if session is None or not can_view_session(db, session, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} does not exist",
+        )
+
+    rows = db.execute(
+        select(SessionParticipant, User)
+        .join(User, User.id == SessionParticipant.user_id)
+        .where(SessionParticipant.session_id == session_id)
+        .order_by(SessionParticipant.joined_at)
+    ).all()
+
+    return [
+        ParticipantResponse(user=UserResponse.model_validate(user), joined_at=participant.joined_at)
+        for participant, user in rows
+    ]
 
 
 @router.patch(
