@@ -21,6 +21,7 @@ from app.schemas.friendship import (
 )
 from app.schemas.user import UserResponse
 from app.security import get_current_user
+from app.services.steam import SteamError, get_friend_steam_ids
 
 
 router = APIRouter(
@@ -82,6 +83,62 @@ def list_friends(
 
     statement = select(User).where(User.id.in_(friend_ids))
     return db.scalars(statement).all()
+
+
+@router.get(
+    "/suggestions/steam",
+    response_model=list[UserResponse],
+)
+async def steam_friend_suggestions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.steam_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Connect your Steam account to see friend suggestions",
+        )
+
+    try:
+        steam_friend_ids = await get_friend_steam_ids(current_user.steam_id)
+    except SteamError as exc:
+        status_code = (
+            status.HTTP_400_BAD_REQUEST
+            if exc.private_friends
+            else status.HTTP_502_BAD_GATEWAY
+        )
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    if not steam_friend_ids:
+        return []
+
+    friend_ids = set(list_friend_ids(db, current_user.id))
+
+    pending_rows = db.scalars(
+        select(FriendRequest).where(
+            or_(
+                FriendRequest.sender_id == current_user.id,
+                FriendRequest.receiver_id == current_user.id,
+            )
+        )
+    ).all()
+    pending_peer_ids = {
+        row.receiver_id if row.sender_id == current_user.id else row.sender_id
+        for row in pending_rows
+    }
+
+    candidates = db.scalars(
+        select(User).where(
+            User.steam_id.in_(steam_friend_ids),
+            User.id != current_user.id,
+        )
+    ).all()
+
+    return [
+        user
+        for user in candidates
+        if user.id not in friend_ids and user.id not in pending_peer_ids
+    ]
 
 
 @router.post(

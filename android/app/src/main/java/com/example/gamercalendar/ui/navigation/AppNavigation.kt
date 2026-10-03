@@ -182,7 +182,12 @@ fun AppNavigation(
 
             composable(Routes.ADD_FRIEND) {
                 AddFriendScreen(
-                    onDone = { navController.popBackStack() }
+                    onDone = { navController.popBackStack() },
+                    onOpenProfile = {
+                        navController.navigate(Routes.USERS) {
+                            launchSingleTop = true
+                        }
+                    }
                 )
             }
 

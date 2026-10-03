@@ -6,6 +6,7 @@ from app.routers.games import router as games_router
 from app.routers.groups import router as groups_router
 from app.routers.users import router as users_router
 from app.routers.sessions import router as sessions_router
+from app.routers.steam import router as steam_router
 
 
 
@@ -17,6 +18,7 @@ app.include_router(friends_router)
 app.include_router(games_router)
 app.include_router(groups_router)
 app.include_router(sessions_router)
+app.include_router(steam_router)
 
 
 @app.get("/health")
