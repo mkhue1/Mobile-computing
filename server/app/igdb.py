@@ -30,7 +30,7 @@ def search_game(query: str) -> list[GameSearchResult]:
     response = requests.post(url, data=db_query, headers=igbd_headers())
     return response.json()
 
-def get_game(igdb_id: int) -> Game | None:
+def fetch_igdb_game(igdb_id: int) -> Game | None:
     url = "https://api.igdb.com/v4/games"
     query = f"fields name, cover.image_id; where id = {igdb_id};"
     response = requests.post(url, data=query, headers=igbd_headers())

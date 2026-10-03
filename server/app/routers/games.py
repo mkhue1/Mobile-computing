@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.helpers.igdb import register_game
-from app.igdb import get_game as fetch_igdb_game
+from app.igdb import fetch_igdb_game
 from app.models.game import Game
 from app.schemas.game import GameCreate, GameResponse
 
