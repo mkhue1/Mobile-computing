@@ -66,6 +66,7 @@ If you make other helpful fixtures when making your own tests, add them to confg
 | `auth_headers(user)` | The `Authorization` header for that user, using a real JWT |
 | `game` | A `Game` row, needed when creating sessions |
 | `make_group(owner, members=(...))` | Creates a group with an owner and optional members |
+| `make_friends(user_a, user_b)` | Creates a friendship between two users |
 
 Example:
 
