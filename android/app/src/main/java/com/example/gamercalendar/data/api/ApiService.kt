@@ -19,6 +19,7 @@ import com.example.gamercalendar.data.model.TokenResponse
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserCreate
 import com.example.gamercalendar.data.model.UserGroup
+import com.example.gamercalendar.data.model.GameSearchResult
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -79,6 +80,16 @@ interface ApiService {
 
     @GET("games/")
     suspend fun getGames(): List<Game>
+    
+    @GET("games/igdb/{igdbId}")
+    suspend fun getGameByIgdbId(
+        @Path("igdbId") igdbId: Long
+    ): Game
+
+    @GET("games/search")
+    suspend fun searchGames(
+        @Query("q") query: String
+    ): List<GameSearchResult>
 
     @GET("groups/")
     suspend fun getGroups(): List<UserGroup>

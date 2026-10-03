@@ -9,6 +9,7 @@ import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.model.SessionVisibility
 import com.example.gamercalendar.data.model.UserGroup
+import com.example.gamercalendar.data.model.GameSearchResult
 import com.example.gamercalendar.data.repository.GroupRepository
 import com.example.gamercalendar.data.repository.SessionRepository
 import com.example.gamercalendar.ui.navigation.Routes
@@ -84,7 +85,7 @@ data class CreateSessionForm(
 
 data class CreateSessionUiState(
     val form: CreateSessionForm = CreateSessionForm.default(),
-    val gameResults: List<Game> = emptyList(),
+    val gameResults: List<GameSearchResult> = emptyList(),
     val isSearchingGames: Boolean = false,
     val gameSearchError: String? = null,
     val groups: List<UserGroup> = emptyList(),
@@ -114,6 +115,7 @@ class CreateSessionViewModel(
     val uiState: StateFlow<CreateSessionUiState> = _uiState.asStateFlow()
 
     private var gameSearchJob: Job? = null
+    private var gameSelectJob: Job? = null
 
     init {
         loadGroups()
@@ -220,10 +222,24 @@ class CreateSessionViewModel(
         }
     }
 
-    fun selectGame(game: Game) {
+    fun selectGame(result: GameSearchResult) {
         gameSearchJob?.cancel()
-        updateForm { it.copy(gameId = game.id, gameQuery = game.name) }
-        _uiState.update { it.copy(isSearchingGames = false) }
+        gameSelectJob?.cancel()
+        updateForm { it.copy(gameId = null, gameQuery = result.name) }
+        _uiState.update { it.copy(isSearchingGames = false, gameResults = emptyList()) }
+
+        gameSelectJob = viewModelScope.launch {
+            try {
+                val game = repository.getGameByIgdbId(result.igdb_id)
+                updateForm { it.copy(gameId = game.id) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(gameSearchError = apiErrorDetail(e) ?: e.message ?: "Couldn't select game")
+                }
+            }
+        }
     }
 
     fun updateForm(transform: (CreateSessionForm) -> CreateSessionForm) {

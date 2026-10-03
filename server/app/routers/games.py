@@ -90,13 +90,20 @@ def create_game(
     return new_game
 
 @router.get(
-    "/search/{query}",
+    "/search",
     response_model=list[GameSearchResponse],
 )
 def search_game(
-    query: str,
+    q: str,
     db: Session = Depends(get_db),
 ):
-    results = search_igdb_game(query)
+    try: 
+        results = search_igdb_game(q)
+    except requests.RequestException:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach IGDB",
+        )
+        
     return results
 

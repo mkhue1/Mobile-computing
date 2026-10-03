@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -52,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -62,7 +65,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
 import com.example.gamercalendar.data.model.Game
+import com.example.gamercalendar.data.model.GameSearchResult
 import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.model.SessionVisibility
 import com.example.gamercalendar.data.model.UserGroup
@@ -337,12 +342,12 @@ private fun LabeledSection(
 @Composable
 private fun GameSearchField(
     query: String,
-    results: List<Game>,
+    results: List<GameSearchResult>,
     isSearching: Boolean,
     error: String?,
     hasSelection: Boolean,
     onQueryChange: (String) -> Unit,
-    onGameSelected: (Game) -> Unit
+    onGameSelected: (GameSearchResult) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val hasSomethingToShow = results.isNotEmpty() || error != null || !isSearching
@@ -394,6 +399,7 @@ private fun GameSearchField(
                     StyledDropdownItem(
                         text = highlightMatch(game.name, query),
                         icon = Icons.Default.SportsEsports,
+                        imageUrl = game.cover_url,
                         onClick = {
                             onGameSelected(game)
                             expanded = false
@@ -489,6 +495,7 @@ private fun ExposedDropdownMenuBoxScope.StyledDropdownMenu(
 private fun StyledDropdownItem(
     text: AnnotatedString,
     icon: ImageVector,
+    imageUrl: String? = null,
     onClick: () -> Unit,
     isSelected: Boolean = false
 ) {
@@ -512,11 +519,11 @@ private fun StyledDropdownItem(
                     .background(primary.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = primary,
-                    modifier = Modifier.size(18.dp)
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = text.toString(),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.width(66.dp).aspectRatio(3f / 4f).clip(RoundedCornerShape(8.dp))
                 )
             }
         },
