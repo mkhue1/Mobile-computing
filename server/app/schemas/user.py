@@ -45,6 +45,7 @@ class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
     username: str
+    steam_linked: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

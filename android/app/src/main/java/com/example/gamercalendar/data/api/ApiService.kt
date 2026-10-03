@@ -15,6 +15,8 @@ import com.example.gamercalendar.data.model.LoginRequest
 import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionParticipant
+import com.example.gamercalendar.data.model.SteamLinkStart
+import com.example.gamercalendar.data.model.SteamStatus
 import com.example.gamercalendar.data.model.TokenResponse
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserCreate
@@ -76,6 +78,18 @@ interface ApiService {
     suspend fun removeFriend(
         @Path("friendId") friendId: String
     )
+
+    @GET("friends/suggestions/steam")
+    suspend fun getSteamFriendSuggestions(): List<User>
+
+    @GET("steam/status")
+    suspend fun getSteamStatus(): SteamStatus
+
+    @GET("steam/link")
+    suspend fun startSteamLink(): SteamLinkStart
+
+    @DELETE("steam/link")
+    suspend fun unlinkSteam()
 
     @GET("games/")
     suspend fun getGames(): List<Game>
