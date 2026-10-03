@@ -166,17 +166,16 @@ class ManageSessionViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val (session, games, me) = coroutineScope {
+                val (session, me) = coroutineScope {
                     val session = async { sessionRepository.getSession(sessionId) }
-                    val games = async { sessionRepository.getGames() }
                     val me = async { userRepository.getCurrentUser() }
-                    Triple(session.await(), games.await(), me.await())
+                    session.await() to me.await()
                 }
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         session = session,
-                        gameName = games.firstOrNull { game -> game.id == session.game_id }?.name,
+                        gameName = session.game.name,
                         startEpochMillis = SessionTime.parseIso(session.start_at) ?: 0L,
                         endEpochMillis = SessionTime.parseIso(session.end_at) ?: 0L,
                         currentUserId = me.id

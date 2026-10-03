@@ -17,8 +17,6 @@ import com.example.gamercalendar.util.SessionTime
 import com.example.gamercalendar.util.apiErrorDetail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -139,11 +137,7 @@ class CreateSessionViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingSession = true, loadError = null) }
             try {
-                val (session, games) = coroutineScope {
-                    val session = async { repository.getSession(sessionId) }
-                    val games = async { repository.getGames() }
-                    session.await() to games.await()
-                }
+                val session = repository.getSession(sessionId)
                 val start = SessionTime.parseIso(session.start_at)
                     ?: throw IllegalStateException("Invalid start time")
                 val end = SessionTime.parseIso(session.end_at)
@@ -153,7 +147,7 @@ class CreateSessionViewModel(
 
                 val form = CreateSessionForm(
                     gameId = session.game_id,
-                    gameQuery = games.firstOrNull { it.id == session.game_id }?.name.orEmpty(),
+                    gameQuery = session.game.name,
                     groupId = session.group_id,
                     title = session.title.orEmpty(),
                     description = session.description.orEmpty(),
