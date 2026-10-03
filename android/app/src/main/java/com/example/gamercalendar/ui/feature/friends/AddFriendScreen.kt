@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.screens
+package com.example.gamercalendar.ui.feature.friends
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -25,8 +25,7 @@ import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.ui.components.inputs.DefaultTextField
 import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
-import com.example.gamercalendar.viewmodel.AddFriendViewModel
-import com.example.gamercalendar.viewmodel.AddFriendViewModel.Companion.MIN_QUERY_LENGTH
+import com.example.gamercalendar.ui.feature.friends.AddFriendViewModel.Companion.MIN_QUERY_LENGTH
 
 @Composable
 fun AddFriendScreen(

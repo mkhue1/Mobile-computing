@@ -1,10 +1,8 @@
-package com.example.gamercalendar.ui.screens
+package com.example.gamercalendar.ui.feature.sessions
 
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,12 +13,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -36,23 +36,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.ui.components.buttons.DefaultButton
+import com.example.gamercalendar.ui.components.buttons.DestructiveButton
 import com.example.gamercalendar.ui.components.buttons.SecondaryButton
 import com.example.gamercalendar.ui.components.cards.AppCard
+import com.example.gamercalendar.ui.components.cards.LocationCard
 import com.example.gamercalendar.ui.components.cards.SessionCard
+import com.example.gamercalendar.ui.components.dialogs.ConfirmDialog
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
+import com.example.gamercalendar.ui.components.labels.Avatar
 import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
-import com.example.gamercalendar.viewmodel.ManageSessionViewModel
-
+import com.example.gamercalendar.ui.components.layout.SectionTitle
 private enum class PendingConfirmation { CANCEL, LEAVE }
 
 @Composable
@@ -66,6 +69,7 @@ fun ManageSessionScreen(
 
     var showInviteSheet by remember { mutableStateOf(false) }
     var pendingConfirmation by remember { mutableStateOf<PendingConfirmation?>(null) }
+    var pendingRemoval by remember { mutableStateOf<User?>(null) }
 
     // Runs each time the screen is shown, so returning from Edit session shows the changes.
     LaunchedEffect(Unit) {
@@ -79,8 +83,8 @@ fun ManageSessionScreen(
         }
     }
 
-    LaunchedEffect(uiState.hasLeft) {
-        if (uiState.hasLeft) onLeft()
+    LaunchedEffect(uiState.hasLeft, uiState.hasDeclined) {
+        if (uiState.hasLeft || uiState.hasDeclined) onLeft()
     }
 
     val session = uiState.session
@@ -100,7 +104,11 @@ fun ManageSessionScreen(
 
             else -> {
                 Text(
-                    text = if (uiState.isOrganiser) "Manage session" else "Session details",
+                    text = when {
+                        uiState.isOrganiser -> "Manage session"
+                        uiState.pendingInvite != null -> "Session invite"
+                        else -> "Session details"
+                    },
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
@@ -119,6 +127,13 @@ fun ManageSessionScreen(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
+
+                session.location_name
+                    ?.takeIf { session.session_type == SessionType.IN_PERSON }
+                    ?.let { location ->
+                        SectionTitle(title = "Location")
+                        LocationCard(location = location)
+                    }
 
                 session.description?.let { notes ->
                     SectionTitle(title = "Notes")
@@ -146,8 +161,30 @@ fun ManageSessionScreen(
                     currentUserId = uiState.currentUserId,
                     isLoading = uiState.isLoadingParticipants,
                     error = uiState.participantsError,
-                    onRetry = viewModel::loadParticipants
+                    onRetry = viewModel::loadParticipants,
+                    onRemove = if (uiState.isOrganiser && !uiState.isCancelled) {
+                        { user -> pendingRemoval = user }
+                    } else {
+                        null
+                    },
+                    removeEnabled = !uiState.isWorking
                 )
+
+                if (uiState.isOrganiser && uiState.sentInvites.isNotEmpty()) {
+                    SectionTitle(title = "Invited", trailing = "${uiState.sentInvites.size}")
+
+                    AppCard {
+                        uiState.sentInvites.forEachIndexed { index, invite ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                                )
+                            }
+                            InvitedRow(user = invite.receiver)
+                        }
+                    }
+                }
 
                 uiState.actionError?.let {
                     ErrorText(text = it)
@@ -170,13 +207,34 @@ fun ManageSessionScreen(
                             enabled = !uiState.isWorking
                         )
 
-                        DestructiveTextButton(
+                        DestructiveButton(
                             text = "Cancel session",
                             onClick = { pendingConfirmation = PendingConfirmation.CANCEL },
                             enabled = !uiState.isWorking
                         )
-                    } else {
-                        DestructiveTextButton(
+                    } else if (uiState.pendingInvite != null) {
+                        Text(
+                            text = "You've been invited to this session.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SecondaryButton(
+                                text = "Decline",
+                                onClick = viewModel::declineInvite,
+                                enabled = !uiState.isWorking,
+                                modifier = Modifier.weight(1f)
+                            )
+                            DefaultButton(
+                                text = "Accept",
+                                onClick = viewModel::acceptInvite,
+                                enabled = !uiState.isWorking,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else if (uiState.isParticipant) {
+                        DestructiveButton(
                             text = "Leave session",
                             onClick = { pendingConfirmation = PendingConfirmation.LEAVE },
                             enabled = !uiState.isWorking
@@ -228,32 +286,19 @@ fun ManageSessionScreen(
 
         null -> Unit
     }
-}
 
-@Composable
-private fun SectionTitle(
-    title: String,
-    trailing: String? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground
+    pendingRemoval?.let { user ->
+        ConfirmDialog(
+            title = "Remove ${user.username}?",
+            text = "They'll lose their spot and need a new invite to join again.",
+            confirmLabel = "Remove",
+            dismissLabel = "Keep",
+            onConfirm = {
+                pendingRemoval = null
+                viewModel.removePlayer(user)
+            },
+            onDismiss = { pendingRemoval = null }
         )
-        trailing?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 
@@ -264,7 +309,9 @@ private fun PlayersCard(
     currentUserId: String?,
     isLoading: Boolean,
     error: String?,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onRemove: ((User) -> Unit)? = null,
+    removeEnabled: Boolean = true
 ) {
     AppCard {
         when {
@@ -291,10 +338,13 @@ private fun PlayersCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                         )
                     }
+                    val isOrganiser = user.id == organiserId
                     PlayerRow(
                         user = user,
-                        isOrganiser = user.id == organiserId,
-                        isCurrentUser = user.id == currentUserId
+                        isOrganiser = isOrganiser,
+                        isCurrentUser = user.id == currentUserId,
+                        onRemove = onRemove?.takeUnless { isOrganiser }?.let { remove -> { remove(user) } },
+                        removeEnabled = removeEnabled
                     )
                 }
             }
@@ -306,7 +356,9 @@ private fun PlayersCard(
 private fun PlayerRow(
     user: User,
     isOrganiser: Boolean,
-    isCurrentUser: Boolean
+    isCurrentUser: Boolean,
+    onRemove: (() -> Unit)? = null,
+    removeEnabled: Boolean = true
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -330,69 +382,42 @@ private fun PlayerRow(
         if (isOrganiser) {
             Tag(text = "Organiser")
         }
-    }
-}
-
-@Composable
-private fun Avatar(name: String) {
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = name.take(1).uppercase(),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-    }
-}
-
-@Composable
-private fun DestructiveTextButton(
-    text: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true
-) {
-    TextButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(
-            text = text,
-            color = if (enabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun ConfirmDialog(
-    title: String,
-    text: String,
-    confirmLabel: String,
-    dismissLabel: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(text) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(text = confirmLabel, color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(dismissLabel)
+        if (onRemove != null) {
+            IconButton(
+                onClick = onRemove,
+                enabled = removeEnabled,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove ${user.username}",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
-    )
+    }
+}
+
+@Composable
+private fun InvitedRow(user: User) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Avatar(name = user.username)
+
+        Text(
+            text = user.username,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+
+        Tag(text = "Pending", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -436,7 +461,7 @@ private fun InviteFriendsSheet(
 
                 friends.isEmpty() -> EmptyState(
                     title = "No friends to invite",
-                    message = "Everyone on your friends list is already in this session."
+                    message = "Everyone on your friends list is already in this session or invited."
                 )
 
                 else -> {

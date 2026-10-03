@@ -1,17 +1,12 @@
-package com.example.gamercalendar.ui.screens
+package com.example.gamercalendar.ui.feature.groups
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,8 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -33,17 +26,19 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.GroupMemberResponse
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.ui.components.buttons.DefaultButton
+import com.example.gamercalendar.ui.components.buttons.DestructiveButton
 import com.example.gamercalendar.ui.components.buttons.SecondaryButton
 import com.example.gamercalendar.ui.components.cards.AppCard
+import com.example.gamercalendar.ui.components.dialogs.ConfirmDialog
 import com.example.gamercalendar.ui.components.dialogs.GroupNameDialog
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.ui.components.inputs.DefaultTextField
+import com.example.gamercalendar.ui.components.labels.Avatar
 import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
-import com.example.gamercalendar.viewmodel.GroupDetailViewModel
-
+import com.example.gamercalendar.ui.components.layout.SectionTitle
 private enum class GroupDetailConfirmation { DELETE, LEAVE }
 
 @Composable
@@ -161,7 +156,7 @@ fun GroupDetailScreen(
                 }
 
                 if (!uiState.isOwner) {
-                    SecondaryButton(
+                    DestructiveButton(
                         text = "Leave group",
                         onClick = { pendingConfirmation = GroupDetailConfirmation.LEAVE },
                         enabled = !uiState.isWorking
@@ -169,7 +164,7 @@ fun GroupDetailScreen(
                 }
 
                 if (uiState.isOwner) {
-                    DestructiveTextButton(
+                    DestructiveButton(
                         text = "Delete group",
                         onClick = { pendingConfirmation = GroupDetailConfirmation.DELETE },
                         enabled = !uiState.isWorking
@@ -236,16 +231,6 @@ fun GroupDetailScreen(
 }
 
 @Composable
-private fun SectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onBackground,
-        modifier = Modifier.padding(top = 8.dp)
-    )
-}
-
-@Composable
 private fun MemberRow(
     member: GroupMemberResponse,
     isOwner: Boolean,
@@ -301,66 +286,4 @@ private fun AddableFriendRow(
             Text("Add")
         }
     }
-}
-
-@Composable
-private fun Avatar(name: String) {
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = name.take(1).uppercase(),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-    }
-}
-
-@Composable
-private fun DestructiveTextButton(
-    text: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true
-) {
-    TextButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(
-            text = text,
-            color = if (enabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun ConfirmDialog(
-    title: String,
-    text: String,
-    confirmLabel: String,
-    dismissLabel: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(text) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(text = confirmLabel, color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(dismissLabel)
-            }
-        }
-    )
 }

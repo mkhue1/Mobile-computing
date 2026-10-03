@@ -2,6 +2,7 @@ package com.example.gamercalendar.data.api
 
 import com.example.gamercalendar.BuildConfig
 import com.example.gamercalendar.data.session.SessionManager
+import com.google.gson.GsonBuilder
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -38,7 +39,8 @@ object ApiClient {
         Retrofit.Builder()
             .baseUrl(BuildConfig.API_BASE_URL)
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            // Nulls must be sent so a PATCH can clear optional fields, e.g. a session's title.
+            .addConverterFactory(GsonConverterFactory.create(GsonBuilder().serializeNulls().create()))
             .build()
             .create(ApiService::class.java)
     }

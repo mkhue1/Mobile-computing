@@ -79,7 +79,7 @@ def test_only_organiser_can_cancel(client, make_user, auth_headers, game):
         headers=auth_headers(organiser),
     ).json()
 
-    response = client.patch(f"/sessions/{session['id']}", headers=auth_headers(stranger))
+    response = client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(stranger))
 
     assert response.status_code == 403
 ```
