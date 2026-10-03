@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.screens
+package com.example.gamercalendar.ui.debug
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row

@@ -20,9 +20,9 @@ import com.example.gamercalendar.data.session.SessionManager
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.navigation.AppNavigation
-import com.example.gamercalendar.ui.screens.AuthScreen
+import com.example.gamercalendar.ui.feature.auth.AuthScreen
 import com.example.gamercalendar.ui.theme.GamerCalendarTheme
-import com.example.gamercalendar.viewmodel.AuthViewModel
+import com.example.gamercalendar.ui.feature.auth.AuthViewModel
 
 class MainActivity : ComponentActivity() {
 

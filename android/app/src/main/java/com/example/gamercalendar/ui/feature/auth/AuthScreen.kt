@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.screens
+package com.example.gamercalendar.ui.feature.auth
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,8 +29,6 @@ import com.example.gamercalendar.ui.components.inputs.DefaultTextField
 import com.example.gamercalendar.ui.components.inputs.PasswordTextField
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.util.AuthValidation
-import com.example.gamercalendar.viewmodel.AuthViewModel
-
 @Composable
 fun AuthScreen(
     authViewModel: AuthViewModel

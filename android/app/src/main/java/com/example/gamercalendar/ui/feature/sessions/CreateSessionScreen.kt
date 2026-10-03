@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.screens
+package com.example.gamercalendar.ui.feature.sessions
 
 import android.text.format.DateFormat
 import android.widget.Toast
@@ -78,8 +78,6 @@ import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.ui.components.inputs.DefaultTextField
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.util.SessionTime
-import com.example.gamercalendar.viewmodel.CreateSessionViewModel
-
 private enum class TimeField { START, END }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -205,6 +203,7 @@ fun CreateSessionScreen(
                     SegmentedButton(
                         selected = form.visibility == visibility,
                         onClick = { viewModel.updateForm { it.copy(visibility = visibility) } },
+                        enabled = uiState.canSelectVisibility(visibility),
                         shape = SegmentedButtonDefaults.itemShape(
                             index = index,
                             count = SessionVisibility.entries.size
@@ -214,6 +213,18 @@ fun CreateSessionScreen(
                         Text(text = visibility.label, maxLines = 1)
                     }
                 }
+            }
+
+            if (uiState.isEditing) {
+                Text(
+                    text = if (uiState.originalVisibility == SessionVisibility.GROUP) {
+                        "Group sessions can't change who can see them."
+                    } else {
+                        "Sessions can't be moved into a group after they're created."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
@@ -241,7 +252,8 @@ fun CreateSessionScreen(
                     optionLabel = UserGroup::name,
                     optionIcon = Icons.Default.Groups,
                     onSelected = { group -> viewModel.updateForm { it.copy(groupId = group.id) } },
-                    isLoading = uiState.isLoadingGroups
+                    isLoading = uiState.isLoadingGroups,
+                    enabled = uiState.canChangeGroup
                 )
             }
         }
@@ -421,19 +433,21 @@ private fun <T> SelectDropdown(
     optionLabel: (T) -> String,
     optionIcon: ImageVector,
     onSelected: (T) -> Unit,
-    isLoading: Boolean = false
+    isLoading: Boolean = false,
+    enabled: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val isInteractive = enabled && !isLoading
 
     ExposedDropdownMenuBox(
-        expanded = expanded && !isLoading,
-        onExpandedChange = { expanded = it && !isLoading }
+        expanded = expanded && isInteractive,
+        onExpandedChange = { expanded = it && isInteractive }
     ) {
         OutlinedTextField(
             value = if (isLoading) "Loading…" else selected?.let(optionLabel).orEmpty(),
             onValueChange = {},
             readOnly = true,
-            enabled = !isLoading,
+            enabled = isInteractive,
             singleLine = true,
             label = { Text(label) },
             placeholder = { Text(placeholder) },
