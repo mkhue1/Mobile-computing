@@ -66,6 +66,7 @@ data class GamingSession(
     val id: String,
     val organiser_id: String,
     val game_id: String,
+    val game: Game,
     val group_id: String?,
     val title: String?,
     val description: String?,

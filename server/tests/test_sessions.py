@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import select
 
+from app.models.game import Game
 from app.models.gaming_session import (
     GamingSession,
     InviteStatus,
@@ -99,6 +100,8 @@ def test_create_session(client, db, make_user, auth_headers, game):
     assert body["organiser_id"] == str(organiser.id)
     assert body["status"] == "open"
     assert body["player_count"] == 1
+    assert body["game"]["id"] == str(game.id)
+    assert body["game"]["name"] == game.name
 
     participant = db.get(SessionParticipant, (UUID(body["id"]), organiser.id))
     assert participant is not None
@@ -362,6 +365,24 @@ def test_update_session_with_full_form(client, make_user, auth_headers, game, cr
     assert response.json()["title"] is None
     assert response.json()["session_type"] == "in_person"
     assert response.json()["location_name"] == "Alex's place"
+
+
+def test_update_session_game_returns_new_game(client, db, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+    new_game = Game(igdb_id=2, name="Another Game")
+    db.add(new_game)
+    db.commit()
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"game_id": str(new_game.id)},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["game"]["id"] == str(new_game.id)
+    assert response.json()["game"]["name"] == "Another Game"
 
 
 def test_only_organiser_can_update(client, auth_headers, invited):

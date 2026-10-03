@@ -11,15 +11,16 @@ import com.example.gamercalendar.data.model.SessionCancelResponse
 import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionParticipant
+import com.example.gamercalendar.data.model.GameSearchResult
 
 class SessionRepository {
 
-    suspend fun getGames(): List<Game> {
-        return ApiClient.api.getGames()
+    suspend fun searchGames(query: String): List<GameSearchResult> {
+        return ApiClient.api.searchGames(query)
     }
 
-    suspend fun searchGames(query: String): List<Game> {
-        return ApiClient.api.getGames().filter { it.name.contains(query, ignoreCase = true) }
+    suspend fun getGameByIgdbId(igdbId: Long): Game {
+        return ApiClient.api.getGameByIgdbId(igdbId)
     }
 
     suspend fun getSessions(): List<GamingSession> {

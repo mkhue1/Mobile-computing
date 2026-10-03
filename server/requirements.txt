@@ -7,3 +7,5 @@ alembic
 email-validator
 bcrypt
 PyJWT
+requests
+cachetools
