@@ -81,9 +81,6 @@ interface ApiService {
         @Path("friendId") friendId: String
     )
 
-    @GET("games/")
-    suspend fun getGames(): List<Game>
-    
     @GET("games/igdb/{igdbId}")
     suspend fun getGameByIgdbId(
         @Path("igdbId") igdbId: Long

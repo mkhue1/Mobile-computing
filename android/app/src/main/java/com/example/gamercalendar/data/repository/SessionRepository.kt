@@ -15,10 +15,6 @@ import com.example.gamercalendar.data.model.GameSearchResult
 
 class SessionRepository {
 
-    suspend fun getGames(): List<Game> {
-        return ApiClient.api.getGames()
-    }
-
     suspend fun searchGames(query: String): List<GameSearchResult> {
         return ApiClient.api.searchGames(query)
     }

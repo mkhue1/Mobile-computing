@@ -115,7 +115,6 @@ fun ManageSessionScreen(
 
                 SessionCard(
                     session = session,
-                    gameName = uiState.gameName,
                     startEpochMillis = uiState.startEpochMillis,
                     endEpochMillis = uiState.endEpochMillis
                 )

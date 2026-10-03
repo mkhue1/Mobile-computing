@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 
 data class SessionListItem(
     val session: GamingSession,
-    val gameName: String?,
     val startEpochMillis: Long,
     val endEpochMillis: Long
 )
@@ -120,6 +119,6 @@ class HomeViewModel : ViewModel() {
     private fun GamingSession.toListItem(): SessionListItem? {
         val start = SessionTime.parseIso(start_at) ?: return null
         val end = SessionTime.parseIso(end_at) ?: return null
-        return SessionListItem(this, game.name, start, end)
+        return SessionListItem(this, start, end)
     }
 }

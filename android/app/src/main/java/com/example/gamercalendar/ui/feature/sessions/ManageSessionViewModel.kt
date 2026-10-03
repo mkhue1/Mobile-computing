@@ -29,7 +29,6 @@ data class ManageSessionUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val session: GamingSession? = null,
-    val gameName: String? = null,
     val startEpochMillis: Long = 0L,
     val endEpochMillis: Long = 0L,
     val currentUserId: String? = null,
@@ -175,7 +174,6 @@ class ManageSessionViewModel(
                     it.copy(
                         isLoading = false,
                         session = session,
-                        gameName = session.game.name,
                         startEpochMillis = SessionTime.parseIso(session.start_at) ?: 0L,
                         endEpochMillis = SessionTime.parseIso(session.end_at) ?: 0L,
                         currentUserId = me.id

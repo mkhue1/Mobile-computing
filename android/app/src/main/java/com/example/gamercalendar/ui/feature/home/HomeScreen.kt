@@ -65,7 +65,6 @@ fun HomeScreen(
                 uiState.invites.forEach { invite ->
                     SessionCard(
                         session = invite.item.session,
-                        gameName = invite.item.gameName,
                         startEpochMillis = invite.item.startEpochMillis,
                         endEpochMillis = invite.item.endEpochMillis,
                         onClick = { onSessionClick(invite.item.session.id) }
@@ -98,7 +97,6 @@ fun HomeScreen(
                 else -> uiState.sessions.forEach { item ->
                     SessionCard(
                         session = item.session,
-                        gameName = item.gameName,
                         startEpochMillis = item.startEpochMillis,
                         endEpochMillis = item.endEpochMillis,
                         onClick = { onSessionClick(item.session.id) }

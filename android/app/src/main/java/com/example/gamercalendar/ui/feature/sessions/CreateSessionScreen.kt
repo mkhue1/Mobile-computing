@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -533,12 +532,21 @@ private fun StyledDropdownItem(
                     .background(primary.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = text.toString(),
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.width(66.dp).aspectRatio(3f / 4f).clip(RoundedCornerShape(8.dp))
+                // The icon shows while the cover loads, if it fails, or when there's no cover.
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = primary,
+                    modifier = Modifier.size(18.dp)
                 )
+                if (imageUrl != null) {
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize()
+                    )
+                }
             }
         },
         trailingIcon = if (isSelected) {
