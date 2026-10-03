@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.helpers.igdb import register_game
-from app.igdb import fetch_igdb_game
+from app.igdb import fetch_igdb_game, search_igdb_game
 from app.models.game import Game
-from app.schemas.game import GameCreate, GameResponse
+from app.schemas.game import GameCreate, GameResponse, GameSearchResponse
 
 
 router = APIRouter(
@@ -88,3 +88,15 @@ def create_game(
     db.refresh(new_game)
 
     return new_game
+
+@router.get(
+    "/search/{query}",
+    response_model=list[GameSearchResponse],
+)
+def search_game(
+    query: str,
+    db: Session = Depends(get_db),
+):
+    results = search_igdb_game(query)
+    return results
+

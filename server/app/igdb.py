@@ -3,15 +3,9 @@ from typing import Tuple
 import requests
 
 from app.models.game import Game
+from app.schemas.game import GameSearchResponse
 
 IGDB_IMAGE_URL = "https://images.igdb.com/igdb/image/upload/t_cover_big/{image_id}.jpg"
-
-
-class GameSearchResult:
-    def __init__(self, id: str, name: str):
-        self.id = id
-        self.name = name
-
 
 def igbd_headers():
     return {"Client-ID": os.getenv("TWITCH_CLIENT_ID"), "Authorization": "Bearer " + os.getenv("IGDB_ACCESS_TOKEN", "")}
@@ -24,11 +18,19 @@ def get_igdb_credentials():
     return
 
 # IGDB uses apicalypse query syntax, see https://apicalypse.io/syntax/  
-def search_game(query: str) -> list[GameSearchResult]:
+def search_igdb_game(query: str, limit: int = 10) -> list[GameSearchResponse]:
     url = "https://api.igdb.com/v4/games"
-    db_query = f"search \"{query}\"; fields name;"
-    response = requests.post(url, data=db_query, headers=igbd_headers())
-    return response.json()
+    # Escape so quotes in the provided qeury can't break search string
+    escaped_query = query.replace("\\", "\\\\").replace('"', '\\"')
+    db_query = f'search "{escaped_query}"; fields name, cover.image_id; limit {limit};'
+    response = requests.post(url, data=db_query, headers=igbd_headers(), timeout=5)
+    response.raise_for_status()
+    data = response.json()
+    return [GameSearchResponse(
+        igdb_id=game["id"],
+        name=game["name"],
+        cover_url=IGDB_IMAGE_URL.format(image_id=game["cover"]["image_id"]) if "cover" in game else None,
+    ) for game in data]
 
 def fetch_igdb_game(igdb_id: int) -> Game | None:
     url = "https://api.igdb.com/v4/games"
