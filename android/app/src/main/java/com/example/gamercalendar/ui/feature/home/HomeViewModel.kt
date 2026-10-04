@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 
 data class SessionListItem(
     val session: GamingSession,
-    val gameName: String?,
     val startEpochMillis: Long,
     val endEpochMillis: Long
 )
@@ -58,23 +57,21 @@ class HomeViewModel : ViewModel() {
                 else it.copy(isLoading = true, error = null)
             }
             try {
-                val (sessions, games, invites) = coroutineScope {
+                val (sessions, invites) = coroutineScope {
                     val sessions = async { repository.getSessions() }
-                    val games = async { repository.getGames() }
                     val invites = async { loadInvites() }
-                    Triple(sessions.await(), games.await(), invites.await())
+                    sessions.await() to invites.await()
                 }
-                val gameNames = games.associate { it.id to it.name }
                 val now = System.currentTimeMillis()
 
                 val upcoming = sessions
-                    .mapNotNull { it.toListItem(gameNames) }
+                    .mapNotNull { it.toListItem() }
                     .filter { it.endEpochMillis > now }
                     .sortedBy { it.startEpochMillis }
 
                 val openInvites = invites
                     .mapNotNull { (invite, session) ->
-                        session.toListItem(gameNames)?.let { InviteListItem(invite, it) }
+                        session.toListItem()?.let { InviteListItem(invite, it) }
                     }
                     .filter { it.item.session.status == SessionStatus.OPEN && it.item.endEpochMillis > now }
                     .sortedBy { it.item.startEpochMillis }
@@ -119,9 +116,9 @@ class HomeViewModel : ViewModel() {
             .filterNotNull()
     }
 
-    private fun GamingSession.toListItem(gameNames: Map<String, String>): SessionListItem? {
+    private fun GamingSession.toListItem(): SessionListItem? {
         val start = SessionTime.parseIso(start_at) ?: return null
         val end = SessionTime.parseIso(end_at) ?: return null
-        return SessionListItem(this, gameNames[game_id], start, end)
+        return SessionListItem(this, start, end)
     }
 }

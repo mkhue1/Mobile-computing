@@ -6,3 +6,9 @@ data class Game(
     val name: String,
     val cover_url: String?
 )
+
+data class GameSearchResult(
+    val igdb_id: Long,
+    val name: String,
+    val cover_url: String?
+)
