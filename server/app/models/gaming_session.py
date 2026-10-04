@@ -6,6 +6,7 @@ import uuid
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    Double,
     Enum as SQLEnum,
     ForeignKey,
     Integer,
@@ -164,6 +165,27 @@ class GamingSession(Base):
         nullable=True,
     )
 
+    location_address: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    # Google Places place ID. Google sets no maximum length, hence Text.
+    location_place_id: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    location_lat: Mapped[float | None] = mapped_column(
+        Double,
+        nullable=True,
+    )
+
+    location_lng: Mapped[float | None] = mapped_column(
+        Double,
+        nullable=True,
+    )
+
     player_limit: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
@@ -210,6 +232,18 @@ class GamingSession(Base):
         CheckConstraint(
             "recurrence_end_at IS NULL OR recurrence_end_at > start_at",
             name="ck_sessions_recurrence_end_after_start",
+        ),
+        CheckConstraint(
+            "(location_lat IS NULL) = (location_lng IS NULL)",
+            name="ck_sessions_location_coordinates_paired",
+        ),
+        CheckConstraint(
+            "location_lat IS NULL OR location_lat BETWEEN -90 AND 90",
+            name="ck_sessions_location_lat_range",
+        ),
+        CheckConstraint(
+            "location_lng IS NULL OR location_lng BETWEEN -180 AND 180",
+            name="ck_sessions_location_lng_range",
         ),
     )
 
