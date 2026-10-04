@@ -170,7 +170,7 @@ class GamingSession(Base):
         nullable=True,
     )
 
-    # Google Places place ID. Google sets no maximum length, hence Text.
+    # google map's place id
     location_place_id: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
