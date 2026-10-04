@@ -28,7 +28,7 @@ def search_igdb_game(query: str, limit: int = 10) -> list[GameSearchResponse]:
     url = "https://api.igdb.com/v4/games"
     # Escape so quotes in the provided qeury can't break search string
     escaped_query = query.replace("\\", "\\\\").replace('"', '\\"')
-    db_query = f'search "{escaped_query}"; fields name, cover.image_id; limit {limit};'
+    db_query = f'where name ~ *"{escaped_query}"*; fields name, cover.image_id; sort total_rating_count desc; limit {limit};'
     response = requests.post(url, data=db_query, headers=igbd_headers(), timeout=5)
     response.raise_for_status()
     data = response.json()

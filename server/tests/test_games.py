@@ -79,7 +79,8 @@ def test_search_sends_limit_and_timeout(fake_igdb):
     igdb.search_igdb_game("halo", limit=5)
 
     call = fake_igdb.calls[0]
-    assert 'search "halo";' in call["data"]
+    assert 'where name ~ *"halo"*;' in call["data"]
+    assert "sort total_rating_count desc;" in call["data"]
     assert "limit 5;" in call["data"]
     assert call["timeout"] == 5
 
@@ -87,7 +88,7 @@ def test_search_sends_limit_and_timeout(fake_igdb):
 def test_search_escapes_quotes_and_backslashes(fake_igdb):
     igdb.search_igdb_game('Halo "Reach\\')
 
-    assert 'search "Halo \\"Reach\\\\";' in fake_igdb.calls[0]["data"]
+    assert 'where name ~ *"Halo \\"Reach\\\\"*;' in fake_igdb.calls[0]["data"]
 
 
 def test_search_raises_on_igdb_error(fake_igdb):
@@ -104,6 +105,13 @@ def test_search_results_are_cached(fake_igdb):
     second = igdb.search_igdb_game("halo")
 
     assert first == second
+    assert len(fake_igdb.calls) == 1
+
+
+def test_search_with_no_matches_returns_empty_list(fake_igdb):
+    results = igdb.search_igdb_game("zelda breath")
+
+    assert results == []
     assert len(fake_igdb.calls) == 1
 
 
