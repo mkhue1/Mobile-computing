@@ -18,10 +18,11 @@ from app.schemas.friendship import (
     FriendRequestCreate,
     FriendRequestResponse,
     FriendshipResponse,
+    SteamRelation,
 )
 from app.schemas.user import UserResponse
 from app.security import get_current_user
-from app.services.steam import SteamError, get_friend_steam_ids
+from app.services.steam import SteamError, get_friend_steam_ids, get_steam_persona_names
 
 
 router = APIRouter(
@@ -40,9 +41,68 @@ def _require_user(db: Session, user_id: UUID) -> User:
     return user
 
 
-def _build_request_responses(
+def _peer_for_request(request: FriendRequest, viewer_id: UUID) -> UUID:
+    if request.sender_id == viewer_id:
+        return request.receiver_id
+    return request.sender_id
+
+
+async def _steam_relation_by_peer(
+    viewer: User,
+    peers_by_id: dict[UUID, User],
+) -> dict[UUID, tuple[SteamRelation, str | None]]:
+    """
+    Map peer user id -> (relation, optional Steam persona name)
+    Empty when the viewer has not linked Steam.
+    """
+    if viewer.steam_id is None:
+        return {}
+
+    relation_by_peer: dict[UUID, tuple[SteamRelation, str | None]] = {}
+    linked_peers: list[User] = []
+
+    for peer in peers_by_id.values():
+        if peer.steam_id is None:
+            relation_by_peer[peer.id] = ("not_linked", None)
+        else:
+            linked_peers.append(peer)
+
+    if not linked_peers:
+        return relation_by_peer
+
+    try:
+        steam_friend_ids = set(await get_friend_steam_ids(viewer.steam_id))
+    except SteamError:
+        return relation_by_peer
+
+    mutual_peers = [
+        peer for peer in linked_peers if peer.steam_id in steam_friend_ids
+    ]
+    persona_names: dict[str, str] = {}
+    if mutual_peers:
+        try:
+            persona_names = await get_steam_persona_names(
+                [peer.steam_id for peer in mutual_peers if peer.steam_id]
+            )
+        except SteamError:
+            persona_names = {}
+
+    for peer in linked_peers:
+        if peer.steam_id in steam_friend_ids:
+            relation_by_peer[peer.id] = (
+                "mutual",
+                persona_names.get(peer.steam_id),
+            )
+        else:
+            relation_by_peer[peer.id] = ("not_friends", None)
+
+    return relation_by_peer
+
+
+async def _build_request_responses(
     db: Session,
     requests: list[FriendRequest],
+    viewer: User,
 ) -> list[FriendRequestResponse]:
     user_ids = {request.sender_id for request in requests} | {
         request.receiver_id for request in requests
@@ -52,21 +112,36 @@ def _build_request_responses(
         users = db.scalars(select(User).where(User.id.in_(user_ids))).all()
         users_by_id = {user.id: user for user in users}
 
+    peers_by_id = {
+        peer_id: users_by_id[peer_id]
+        for request in requests
+        if (peer_id := _peer_for_request(request, viewer.id)) in users_by_id
+    }
+    steam_by_peer = await _steam_relation_by_peer(viewer, peers_by_id)
+
     def _user_response(user_id: UUID) -> UserResponse | None:
         user = users_by_id.get(user_id)
         return UserResponse.model_validate(user) if user is not None else None
 
-    return [
-        FriendRequestResponse(
-            id=request.id,
-            sender_id=request.sender_id,
-            receiver_id=request.receiver_id,
-            created_at=request.created_at,
-            sender=_user_response(request.sender_id),
-            receiver=_user_response(request.receiver_id),
+    responses: list[FriendRequestResponse] = []
+    for request in requests:
+        peer_id = _peer_for_request(request, viewer.id)
+        steam_relation, steam_persona_name = steam_by_peer.get(
+            peer_id, (None, None)
         )
-        for request in requests
-    ]
+        responses.append(
+            FriendRequestResponse(
+                id=request.id,
+                sender_id=request.sender_id,
+                receiver_id=request.receiver_id,
+                created_at=request.created_at,
+                sender=_user_response(request.sender_id),
+                receiver=_user_response(request.receiver_id),
+                steam_relation=steam_relation,
+                steam_persona_name=steam_persona_name,
+            )
+        )
+    return responses
 
 
 @router.get(
@@ -210,7 +285,7 @@ def send_friend_request(
     "/requests",
     response_model=list[FriendRequestResponse],
 )
-def list_friend_requests(
+async def list_friend_requests(
     direction: str = Query(
         "incoming",
         pattern="^(incoming|outgoing|all)$",
@@ -236,7 +311,7 @@ def list_friend_requests(
         )
 
     requests = db.scalars(statement).all()
-    return _build_request_responses(db, list(requests))
+    return await _build_request_responses(db, list(requests), current_user)
 
 
 @router.post(

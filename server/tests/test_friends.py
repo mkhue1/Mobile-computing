@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -168,6 +170,87 @@ def test_list_requests_rejects_unknown_direction(client, make_user, auth_headers
     )
 
     assert response.status_code == 422
+
+
+def test_incoming_request_has_no_steam_relation_when_viewer_unlinked(
+    client, auth_headers, requested
+):
+    _, receiver, _ = requested
+
+    incoming = client.get("/friends/requests", headers=auth_headers(receiver)).json()
+
+    assert incoming[0]["steam_relation"] is None
+    assert incoming[0]["steam_persona_name"] is None
+
+
+def test_incoming_request_marks_requester_without_steam(
+    client, make_user, auth_headers, send_request, db
+):
+    receiver = make_user("receiver")
+    sender = make_user("sender")
+    receiver.steam_id = "76561198000000001"
+    receiver.steam_linked_at = datetime.now(timezone.utc)
+    db.commit()
+    send_request(sender, receiver)
+
+    incoming = client.get("/friends/requests", headers=auth_headers(receiver)).json()
+
+    assert incoming[0]["steam_relation"] == "not_linked"
+    assert incoming[0]["steam_persona_name"] is None
+
+
+def test_incoming_request_marks_steam_mutual_and_persona(
+    client, make_user, auth_headers, send_request, db
+):
+    receiver = make_user("receiver")
+    sender = make_user("sender")
+    receiver.steam_id = "76561198000000001"
+    sender.steam_id = "76561198000000002"
+    receiver.steam_linked_at = datetime.now(timezone.utc)
+    sender.steam_linked_at = datetime.now(timezone.utc)
+    db.commit()
+    send_request(sender, receiver)
+
+    with (
+        patch(
+            "app.routers.friends.get_friend_steam_ids",
+            new=AsyncMock(return_value=["76561198000000002"]),
+        ),
+        patch(
+            "app.routers.friends.get_steam_persona_names",
+            new=AsyncMock(return_value={"76561198000000002": "SteamSender"}),
+        ),
+    ):
+        incoming = client.get(
+            "/friends/requests", headers=auth_headers(receiver)
+        ).json()
+
+    assert incoming[0]["steam_relation"] == "mutual"
+    assert incoming[0]["steam_persona_name"] == "SteamSender"
+
+
+def test_incoming_request_marks_linked_but_not_steam_friends(
+    client, make_user, auth_headers, send_request, db
+):
+    receiver = make_user("receiver")
+    sender = make_user("sender")
+    receiver.steam_id = "76561198000000001"
+    sender.steam_id = "76561198000000002"
+    receiver.steam_linked_at = datetime.now(timezone.utc)
+    sender.steam_linked_at = datetime.now(timezone.utc)
+    db.commit()
+    send_request(sender, receiver)
+
+    with patch(
+        "app.routers.friends.get_friend_steam_ids",
+        new=AsyncMock(return_value=["76561198000000999"]),
+    ):
+        incoming = client.get(
+            "/friends/requests", headers=auth_headers(receiver)
+        ).json()
+
+    assert incoming[0]["steam_relation"] == "not_friends"
+    assert incoming[0]["steam_persona_name"] is None
 
 
 # --- POST /friends/requests/{request_id}/accept -------------------------------

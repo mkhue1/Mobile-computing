@@ -16,6 +16,9 @@ STEAM_CLAIMED_ID_RE = re.compile(
     r"^https://steamcommunity\.com/openid/id/(\d{17})$"
 )
 FRIEND_LIST_URL = "https://api.steampowered.com/ISteamUser/GetFriendList/v1/"
+PLAYER_SUMMARIES_URL = (
+    "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
+)
 
 
 class SteamError(Exception):
@@ -96,3 +99,30 @@ async def get_friend_steam_ids(steam_id: str) -> list[str]:
     data = response.json()
     friends = data.get("friendslist", {}).get("friends", [])
     return [str(friend["steamid"]) for friend in friends if "steamid" in friend]
+
+
+async def get_steam_persona_names(steam_ids: list[str]) -> dict[str, str]:
+    """Return a map of SteamID64 -> persona name for the given IDs."""
+    if not settings.steam_api_key:
+        raise SteamError("STEAM_API_KEY is not configured")
+    if not steam_ids:
+        return {}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(
+            PLAYER_SUMMARIES_URL,
+            params={
+                "key": settings.steam_api_key,
+                "steamids": ",".join(steam_ids),
+            },
+        )
+
+    if response.status_code != 200:
+        raise SteamError("Failed to fetch Steam player summaries")
+
+    players = response.json().get("response", {}).get("players", [])
+    return {
+        str(player["steamid"]): str(player["personaname"])
+        for player in players
+        if "steamid" in player and "personaname" in player
+    }
