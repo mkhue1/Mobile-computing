@@ -1,7 +1,5 @@
 package com.example.gamercalendar.ui.navigation
 
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,11 +15,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gamercalendar.ui.feature.calendar.CalendarScreen
+import com.example.gamercalendar.ui.feature.calendar.CalendarViewModel
+import com.example.gamercalendar.ui.feature.calendar.CalendarViewModelFactory
 import com.example.gamercalendar.ui.components.app.AppBottomBar
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.app.AppTopBar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
-import com.example.gamercalendar.ui.debug.CardTestScreen
 import com.example.gamercalendar.ui.feature.auth.AuthViewModel
 import com.example.gamercalendar.ui.feature.friends.AddFriendScreen
 import com.example.gamercalendar.ui.feature.friends.FriendsHubScreen
@@ -148,7 +150,8 @@ fun AppNavigation(
             }
 
             composable(Routes.ITEM_2) {
-                CardTestScreen()
+                val calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory())
+                CalendarScreen(viewModel = calendarViewModel)
             }
 
             composable(Routes.USERS) {
