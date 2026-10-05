@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.AlertDialog
@@ -67,9 +68,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.example.gamercalendar.data.model.Game
 import com.example.gamercalendar.data.model.GameSearchResult
+import com.example.gamercalendar.data.model.SessionPlace
 import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.model.SessionVisibility
 import com.example.gamercalendar.data.model.UserGroup
+import com.example.gamercalendar.data.repository.PlaceSuggestion
 import com.example.gamercalendar.ui.components.buttons.DefaultButton
 import com.example.gamercalendar.ui.components.buttons.SecondaryButton
 import com.example.gamercalendar.ui.components.feedback.ErrorText
@@ -189,10 +192,15 @@ fun CreateSessionScreen(
         }
 
         if (form.sessionType == SessionType.IN_PERSON) {
-            DefaultTextField(
-                value = form.locationName,
-                onValueChange = { value -> viewModel.updateForm { it.copy(locationName = value) } },
-                label = "Location"
+            LocationSearchField(
+                query = form.locationQuery,
+                place = form.place,
+                canSearch = uiState.canSearchPlaces,
+                results = uiState.placeResults,
+                isSearching = uiState.isSearchingPlaces || uiState.isLoadingPlace,
+                error = uiState.placeSearchError,
+                onQueryChange = viewModel::onLocationQueryChange,
+                onPlaceSelected = viewModel::selectPlace
             )
         }
 
@@ -424,6 +432,91 @@ private fun GameSearchField(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun LocationSearchField(
+    query: String,
+    place: SessionPlace?,
+    canSearch: Boolean,
+    results: List<PlaceSuggestion>,
+    isSearching: Boolean,
+    error: String?,
+    onQueryChange: (String) -> Unit,
+    onPlaceSelected: (PlaceSuggestion) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val hasSomethingToShow = results.isNotEmpty() || error != null || !isSearching
+    val showResults = canSearch && expanded && query.isNotBlank() && place == null && hasSomethingToShow
+
+    val hint = when {
+        place != null -> place.address
+        canSearch && query.isNotBlank() && !isSearching -> "Pick a suggestion to show it on a map"
+        else -> null
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = showResults,
+        onExpandedChange = { expanded = it }
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = {
+                onQueryChange(it)
+                expanded = true
+            },
+            singleLine = true,
+            label = { Text("Location") },
+            placeholder = { Text(if (canSearch) "Search for a place or address" else "Where are you playing?") },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Default.Place,
+                    contentDescription = null
+                )
+            },
+            trailingIcon = {
+                if (isSearching) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+            },
+            supportingText = hint?.let { { Text(it) } },
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
+                .fillMaxWidth()
+        )
+
+        StyledDropdownMenu(
+            expanded = showResults,
+            onDismissRequest = { expanded = false }
+        ) {
+            when {
+                error != null -> DropdownMessage(text = error, isError = true)
+
+                results.isEmpty() -> DropdownMessage(text = "No places found")
+
+                else -> {
+                    results.forEach { suggestion ->
+                        StyledDropdownItem(
+                            text = highlightMatch(suggestion.primaryText, query),
+                            supportingText = suggestion.secondaryText.ifBlank { null },
+                            icon = Icons.Default.Place,
+                            onClick = {
+                                onPlaceSelected(suggestion)
+                                expanded = false
+                            }
+                        )
+                    }
+                    // Google's terms require attribution when suggestions are shown without a map.
+                    DropdownMessage(text = "Powered by Google")
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun <T> SelectDropdown(
     label: String,
     placeholder: String,
@@ -509,6 +602,7 @@ private fun StyledDropdownItem(
     text: AnnotatedString,
     icon: ImageVector,
     imageUrl: String? = null,
+    supportingText: String? = null,
     onClick: () -> Unit,
     isSelected: Boolean = false
 ) {
@@ -516,13 +610,24 @@ private fun StyledDropdownItem(
 
     DropdownMenuItem(
         text = {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (isSelected) primary else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Column {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (isSelected) primary else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (supportingText != null) {
+                    Text(
+                        text = supportingText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         },
         leadingIcon = {
             Box(

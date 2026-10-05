@@ -42,6 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.model.User
+import com.example.gamercalendar.data.model.place
 import com.example.gamercalendar.ui.components.buttons.DefaultButton
 import com.example.gamercalendar.ui.components.buttons.DestructiveButton
 import com.example.gamercalendar.ui.components.buttons.SecondaryButton
@@ -131,7 +132,7 @@ fun ManageSessionScreen(
                     ?.takeIf { session.session_type == SessionType.IN_PERSON }
                     ?.let { location ->
                         SectionTitle(title = "Location")
-                        LocationCard(location = location)
+                        LocationCard(name = location, place = session.place)
                     }
 
                 session.description?.let { notes ->

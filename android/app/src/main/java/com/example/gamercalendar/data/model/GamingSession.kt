@@ -59,7 +59,20 @@ data class SessionCreate(
     val session_type: SessionType,
     val visibility: SessionVisibility,
     val location_name: String?,
+    val location_address: String? = null,
+    val location_place_id: String? = null,
+    val location_lat: Double? = null,
+    val location_lng: Double? = null,
     val player_limit: Int?
+)
+
+/** A Google Maps place chosen as an in-person session's location. */
+data class SessionPlace(
+    val name: String,
+    val address: String?,
+    val placeId: String?,
+    val lat: Double,
+    val lng: Double
 )
 
 data class GamingSession(
@@ -76,11 +89,24 @@ data class GamingSession(
     val visibility: SessionVisibility,
     val status: SessionStatus,
     val location_name: String?,
+    val location_address: String?,
+    val location_place_id: String?,
+    val location_lat: Double?,
+    val location_lng: Double?,
     val player_limit: Int?,
     val player_count: Int,
     val created_at: String,
     val updated_at: String
 )
+
+/** Null when the session has no location or only a typed name without coordinates. */
+val GamingSession.place: SessionPlace?
+    get() {
+        val name = location_name ?: return null
+        val lat = location_lat ?: return null
+        val lng = location_lng ?: return null
+        return SessionPlace(name, location_address, location_place_id, lat, lng)
+    }
 
 data class SessionParticipant(
     val user: User,
