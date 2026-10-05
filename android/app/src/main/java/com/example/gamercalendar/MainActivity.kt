@@ -23,6 +23,7 @@ import com.example.gamercalendar.ui.navigation.AppNavigation
 import com.example.gamercalendar.ui.feature.auth.AuthScreen
 import com.example.gamercalendar.ui.theme.GamerCalendarTheme
 import com.example.gamercalendar.ui.feature.auth.AuthViewModel
+import com.google.android.libraries.places.api.Places
 
 class MainActivity : ComponentActivity() {
 
@@ -41,6 +42,10 @@ class MainActivity : ComponentActivity() {
                 arrayOf(Manifest.permission.ACCESS_LOCAL_NETWORK),
                 1001
             )
+        }
+
+        if (BuildConfig.GOOGLE_MAPS_API_KEY.isNotBlank() && !Places.isInitialized()) {
+            Places.initializeWithNewPlacesApiEnabled(applicationContext, BuildConfig.GOOGLE_MAPS_API_KEY)
         }
 
         val sessionManager = SessionManager(applicationContext)

@@ -18,6 +18,8 @@ val apiBaseUrl = localProperties.getProperty(
     "http://10.0.2.2:8000/"
 )
 
+val googleMapsApiKey = localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")
+
 android {
     namespace = "com.example.gamercalendar"
 
@@ -39,6 +41,24 @@ android {
             "API_BASE_URL",
             "\"$apiBaseUrl\""
         )
+
+        buildConfigField(
+            "String",
+            "GOOGLE_MAPS_API_KEY",
+            "\"$googleMapsApiKey\""
+        )
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey
+    }
+
+    // shared so everyone has the same debug SHA-1 for the Google Maps key restriction.
+    // TODO: DELETE THIS IN PROD
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
@@ -80,6 +100,11 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.navigation:navigation-compose:2.10.1")
+
+    // Newer versions (maps-compose 8.4.0+, places 6+) need Kotlin 2.4
+    implementation("com.google.maps.android:maps-compose:8.3.1")
+    implementation("com.google.android.libraries.places:places:5.3.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
 
     testImplementation(libs.junit)
 

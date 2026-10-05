@@ -567,6 +567,180 @@ def test_update_group_session_resending_same_group(
     assert response.json()["group_id"] == str(group.id)
 
 
+# --- Session locations --------------------------------------------------------
+
+
+GOOD_GAMES = {
+    "location_name": "Good Games Melbourne",
+    "location_address": "Shop 1, 123 Swanston St, Melbourne VIC 3000, Australia",
+    "location_place_id": "ChIJexamplePlaceId",
+    "location_lat": -37.8136,
+    "location_lng": 144.9631,
+}
+
+
+def test_create_in_person_session_with_place(client, db, make_user, auth_headers, game):
+    response = client.post(
+        "/sessions/create",
+        json=session_payload(game, session_type="in_person", **GOOD_GAMES),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    for field, value in GOOD_GAMES.items():
+        assert body[field] == value
+
+    stored = db.get(GamingSession, UUID(body["id"]))
+    assert stored.location_place_id == GOOD_GAMES["location_place_id"]
+    assert stored.location_lat == GOOD_GAMES["location_lat"]
+
+
+def test_create_in_person_session_with_name_only(make_user, create_session):
+    session = create_session(make_user(), session_type="in_person", location_name="Alex's place")
+
+    assert session["location_name"] == "Alex's place"
+    assert session["location_place_id"] is None
+    assert session["location_lat"] is None
+
+
+@pytest.mark.parametrize("location_name", [None, "   "])
+def test_create_in_person_session_requires_location(
+    client, make_user, auth_headers, game, location_name
+):
+    response = client.post(
+        "/sessions/create",
+        json=session_payload(game, session_type="in_person", location_name=location_name),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"location_lat": None},
+        {"location_lng": None},
+        {"location_name": None},
+        {"location_lat": 90.1},
+        {"location_lat": -90.1},
+        {"location_lng": 180.1},
+        {"location_lng": -180.1},
+    ],
+    ids=["missing lat", "missing lng", "missing name", "lat high", "lat low", "lng high", "lng low"],
+)
+def test_create_rejects_invalid_location(client, make_user, auth_headers, game, overrides):
+    response = client.post(
+        "/sessions/create",
+        json=session_payload(game, session_type="in_person", **{**GOOD_GAMES, **overrides}),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_location_to_place(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", location_name="Alex's place")
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json=GOOD_GAMES, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200, response.text
+    for field, value in GOOD_GAMES.items():
+        assert response.json()[field] == value
+
+
+def test_update_location_name_clears_old_place_details(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", **GOOD_GAMES)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"location_name": "Alex's place"},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["location_name"] == "Alex's place"
+    assert body["location_address"] is None
+    assert body["location_place_id"] is None
+    assert body["location_lat"] is None
+    assert body["location_lng"] is None
+
+
+def test_update_other_fields_keeps_location(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", **GOOD_GAMES)
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"title": "Board games"}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200, response.text
+    for field, value in GOOD_GAMES.items():
+        assert response.json()[field] == value
+
+
+def test_update_rejects_partial_coordinates(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", **GOOD_GAMES)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"location_name": "Somewhere", "location_lat": -37.0},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_cannot_clear_location_of_in_person_session(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", **GOOD_GAMES)
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"location_name": None}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_to_in_person_requires_location(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"session_type": "in_person"},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_to_online_can_clear_location(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", **GOOD_GAMES)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"session_type": "online", "location_name": None},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["location_name"] is None
+    assert response.json()["location_lat"] is None
+
+
 # --- POST /sessions/{session_id}/cancel ---------------------------------------
 
 
