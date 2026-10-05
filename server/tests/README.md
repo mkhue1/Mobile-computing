@@ -66,6 +66,7 @@ If you make other helpful fixtures when making your own tests, add them to confg
 | `auth_headers(user)` | The `Authorization` header for that user, using a real JWT |
 | `game` | A `Game` row, needed when creating sessions |
 | `make_group(owner, members=(...))` | Creates a group with an owner and optional members |
+| `make_friends(user_a, user_b)` | Creates a friendship between two users |
 
 Example:
 
@@ -79,7 +80,7 @@ def test_only_organiser_can_cancel(client, make_user, auth_headers, game):
         headers=auth_headers(organiser),
     ).json()
 
-    response = client.patch(f"/sessions/{session['id']}", headers=auth_headers(stranger))
+    response = client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(stranger))
 
     assert response.status_code == 403
 ```

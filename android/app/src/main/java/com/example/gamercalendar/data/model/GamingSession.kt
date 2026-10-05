@@ -43,7 +43,10 @@ enum class InviteStatus {
     ACCEPTED,
 
     @SerializedName("declined")
-    DECLINED
+    DECLINED,
+
+    @SerializedName("cancelled")
+    CANCELLED
 }
 
 data class SessionCreate(
@@ -63,6 +66,7 @@ data class GamingSession(
     val id: String,
     val organiser_id: String,
     val game_id: String,
+    val game: Game,
     val group_id: String?,
     val title: String?,
     val description: String?,
@@ -96,4 +100,28 @@ data class SessionInvite(
     val status: InviteStatus,
     val created_at: String,
     val responded_at: String?
+)
+
+data class SentSessionInvite(
+    val id: String,
+    val session_id: String,
+    val receiver: User,
+    val status: InviteStatus,
+    val created_at: String
+)
+
+data class InviteAction(
+    val invite_id: String
+)
+
+data class InviteActionResponse(
+    val status: Boolean,
+    val message: String,
+    val id: String
+)
+
+data class SessionCancelResponse(
+    val status: Boolean,
+    val message: String,
+    val id: String
 )

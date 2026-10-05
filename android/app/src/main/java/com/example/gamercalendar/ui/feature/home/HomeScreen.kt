@@ -1,4 +1,4 @@
-package com.example.gamercalendar.ui.screens
+package com.example.gamercalendar.ui.feature.home
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
@@ -19,8 +19,6 @@ import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
-import com.example.gamercalendar.viewmodel.HomeViewModel
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -57,6 +55,23 @@ fun HomeScreen(
                 onClick = onCreateSessionClick
             )
 
+            if (uiState.invites.isNotEmpty()) {
+                Text(
+                    text = "Session invites",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+
+                uiState.invites.forEach { invite ->
+                    SessionCard(
+                        session = invite.item.session,
+                        startEpochMillis = invite.item.startEpochMillis,
+                        endEpochMillis = invite.item.endEpochMillis,
+                        onClick = { onSessionClick(invite.item.session.id) }
+                    )
+                }
+            }
+
             Text(
                 text = "Upcoming sessions",
                 style = MaterialTheme.typography.titleLarge,
@@ -82,7 +97,6 @@ fun HomeScreen(
                 else -> uiState.sessions.forEach { item ->
                     SessionCard(
                         session = item.session,
-                        gameName = item.gameName,
                         startEpochMillis = item.startEpochMillis,
                         endEpochMillis = item.endEpochMillis,
                         onClick = { onSessionClick(item.session.id) }

@@ -21,15 +21,15 @@ import com.example.gamercalendar.ui.components.app.AppBottomBar
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.app.AppTopBar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
-import com.example.gamercalendar.ui.screens.AddFriendScreen
-import com.example.gamercalendar.ui.screens.CardTestScreen
-import com.example.gamercalendar.ui.screens.CreateSessionScreen
-import com.example.gamercalendar.ui.screens.FriendsHubScreen
-import com.example.gamercalendar.ui.screens.GroupDetailScreen
-import com.example.gamercalendar.ui.screens.HomeScreen
-import com.example.gamercalendar.ui.screens.ManageSessionScreen
-import com.example.gamercalendar.ui.screens.UsersScreen
-import com.example.gamercalendar.viewmodel.AuthViewModel
+import com.example.gamercalendar.ui.debug.CardTestScreen
+import com.example.gamercalendar.ui.feature.auth.AuthViewModel
+import com.example.gamercalendar.ui.feature.friends.AddFriendScreen
+import com.example.gamercalendar.ui.feature.friends.FriendsHubScreen
+import com.example.gamercalendar.ui.feature.groups.GroupDetailScreen
+import com.example.gamercalendar.ui.feature.home.HomeScreen
+import com.example.gamercalendar.ui.feature.profile.UsersScreen
+import com.example.gamercalendar.ui.feature.sessions.CreateSessionScreen
+import com.example.gamercalendar.ui.feature.sessions.ManageSessionScreen
 
 
 @Composable

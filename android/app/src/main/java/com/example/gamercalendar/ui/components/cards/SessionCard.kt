@@ -19,9 +19,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.example.gamercalendar.data.model.GamingSession
 import com.example.gamercalendar.data.model.SessionStatus
 import com.example.gamercalendar.data.model.SessionType
@@ -36,7 +38,6 @@ import com.example.gamercalendar.util.SessionTime
 @Composable
 fun SessionCard(
     session: GamingSession,
-    gameName: String?,
     startEpochMillis: Long,
     endEpochMillis: Long,
     modifier: Modifier = Modifier,
@@ -44,7 +45,8 @@ fun SessionCard(
 ) {
     val context = LocalContext.current
 
-    val headline = session.title ?: gameName ?: "Gaming session"
+    val gameName = session.game.name
+    val headline = session.title ?: gameName
     val where = if (session.session_type == SessionType.IN_PERSON && session.location_name != null) {
         "In person · ${session.location_name}"
     } else {
@@ -67,7 +69,7 @@ fun SessionCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            GameCoverPlaceholder()
+            GameCover(coverUrl = session.game.cover_url, gameName = gameName)
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -109,9 +111,9 @@ fun SessionCard(
     }
 }
 
-/** Portrait slot sized like game box art, for when covers are available. */
+/** Game box art, with the controller icon shown while loading, if loading fails, or if there's no cover. */
 @Composable
-private fun GameCoverPlaceholder() {
+private fun GameCover(coverUrl: String?, gameName: String?) {
     Box(
         modifier = Modifier
             .width(66.dp)
@@ -126,5 +128,13 @@ private fun GameCoverPlaceholder() {
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(28.dp)
         )
+        if (coverUrl != null) {
+            AsyncImage(
+                model = coverUrl,
+                contentDescription = gameName,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
+        }
     }
 }

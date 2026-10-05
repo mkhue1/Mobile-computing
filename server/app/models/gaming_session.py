@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING
 import uuid
 
 from sqlalchemy import (
@@ -14,9 +15,12 @@ from sqlalchemy import (
     Uuid,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.game import Game
 
 
 class SessionType(str, Enum):
@@ -184,6 +188,11 @@ class GamingSession(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+    # Loaded eagerly so responses can include the game's name and cover without the
+    # client fetching every game separately. "selectin" uses a second query rather
+    # than a join, because Postgres rejects SELECT ... FOR UPDATE on an outer join.
+    game: Mapped["Game"] = relationship(lazy="selectin")
 
     __table_args__ = (
         CheckConstraint(

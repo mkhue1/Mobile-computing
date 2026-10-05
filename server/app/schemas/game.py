@@ -9,7 +9,6 @@ class GameCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     cover_url: str | None = None
 
-
 class GameResponse(BaseModel):
     id: UUID
     igdb_id: int
@@ -18,3 +17,8 @@ class GameResponse(BaseModel):
     last_synced_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
+
+class GameSearchResponse(BaseModel):
+    igdb_id: int
+    name: str
+    cover_url: str | None
