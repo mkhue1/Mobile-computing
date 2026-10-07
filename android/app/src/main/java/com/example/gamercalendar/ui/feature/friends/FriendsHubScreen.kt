@@ -67,7 +67,7 @@ fun FriendsHubScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                text = "Friends & groups",
+                text = "Friends & Groups",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground
             )
