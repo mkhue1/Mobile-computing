@@ -16,6 +16,7 @@ import androidx.navigation.navArgument
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.ui.feature.calendar.CalendarScreen
 import com.example.gamercalendar.ui.feature.calendar.CalendarViewModel
@@ -150,7 +151,7 @@ fun AppNavigation(
             }
 
             composable(Routes.ITEM_2) {
-                val calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory())
+                val calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory(contentResolver = LocalContext.current.contentResolver))
                 CalendarScreen(viewModel = calendarViewModel)
             }
 

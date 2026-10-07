@@ -1,5 +1,6 @@
 package com.example.gamercalendar.ui.feature.calendar
 
+import android.content.ContentResolver
 import com.example.gamercalendar.data.api.ApiClient
 import com.example.gamercalendar.data.api.ApiService
 import androidx.lifecycle.ViewModel
@@ -40,6 +41,7 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val sessions = repository.getMySessions()
+                repository.getExternalEvents(System.currentTimeMillis(), System.currentTimeMillis() + 1000000000000000000)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -68,12 +70,12 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
     }
 }
 
-class CalendarViewModelFactory(private val api: ApiService = ApiClient.api) : ViewModelProvider.Factory {
+class CalendarViewModelFactory(private val api: ApiService = ApiClient.api, private val contentResolver: ContentResolver) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         require(modelClass.isAssignableFrom(CalendarViewModel::class.java)) {
             "Unknown ViewModel class: ${modelClass.name}"
         }
-        return CalendarViewModel(CalendarRepository(api)) as T
+        return CalendarViewModel(CalendarRepository(api, contentResolver)) as T
     }
 }
