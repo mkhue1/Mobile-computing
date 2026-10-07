@@ -23,6 +23,8 @@ data class AddFriendUiState(
     val results: List<User> = emptyList(),
     val sentTo: Set<String> = emptySet(),
     val pendingFromUserIds: Set<String> = emptySet(),
+    val currentUserId: String? = null,
+    val currentUsername: String? = null,
     val isLoading: Boolean = false,
     val isSearching: Boolean = false,
     val error: String? = null
@@ -48,17 +50,21 @@ class AddFriendViewModel : ViewModel() {
                     val friendsDeferred = async { friendRepository.getFriends() }
                     val outgoingDeferred = async { friendRepository.getFriendRequests("outgoing") }
                     val incomingDeferred = async { friendRepository.getFriendRequests("incoming") }
+                    val meDeferred = async { userRepository.getCurrentUser() }
 
                     friendIds = friendsDeferred.await().map { it.id }.toSet()
                     val outgoing = outgoingDeferred.await()
                     val incoming = incomingDeferred.await()
+                    val me = meDeferred.await()
 
                     _uiState.update {
                         it.copy(
                             isLoading = false,
                             results = excludeFriends(searchResults),
                             sentTo = outgoing.map { req -> req.receiver_id }.toSet(),
-                            pendingFromUserIds = incoming.map { req -> req.sender_id }.toSet()
+                            pendingFromUserIds = incoming.map { req -> req.sender_id }.toSet(),
+                            currentUserId = me.id,
+                            currentUsername = me.username
                         )
                     }
                 }

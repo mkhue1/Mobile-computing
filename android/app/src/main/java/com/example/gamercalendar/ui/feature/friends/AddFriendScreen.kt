@@ -12,13 +12,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.User
-import com.example.gamercalendar.ui.components.cards.AppCard
 import com.example.gamercalendar.ui.components.buttons.SecondaryButton
+import com.example.gamercalendar.ui.components.cards.AppCard
+import com.example.gamercalendar.ui.components.dialogs.MyQrCodeDialog
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
@@ -33,6 +37,7 @@ fun AddFriendScreen(
     viewModel: AddFriendViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showQrDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.load()
@@ -46,6 +51,18 @@ fun AddFriendScreen(
         Text(
             text = "Add friend",
             style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        SecondaryButton(
+            text = "My QR code",
+            onClick = { showQrDialog = true },
+            enabled = uiState.currentUserId != null
+        )
+
+        Text(
+            text = "Search by username",
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
 
@@ -91,6 +108,16 @@ fun AddFriendScreen(
         }
 
         SecondaryButton(text = "Done", onClick = onDone)
+    }
+
+    uiState.currentUserId?.let { userId ->
+        if (showQrDialog) {
+            MyQrCodeDialog(
+                userId = userId,
+                username = uiState.currentUsername,
+                onDismiss = { showQrDialog = false }
+            )
+        }
     }
 }
 
