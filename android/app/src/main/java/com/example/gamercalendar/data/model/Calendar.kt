@@ -16,3 +16,11 @@ data class CalendarSession(
     val playerCount: Int,
     val playerLimit: Int?
 )
+
+data class ExternalSession(
+    val id: String,
+    val title: String,
+    val date: LocalDate,
+    val startTime: LocalTime,
+    val endTime: LocalTime,
+)

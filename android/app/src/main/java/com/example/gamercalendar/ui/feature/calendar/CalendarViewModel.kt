@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.gamercalendar.data.model.CalendarSession
+import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.repository.CalendarRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,9 +18,11 @@ import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.io.IOException
 import java.time.LocalDate
+import java.time.ZonedDateTime
 
 data class CalendarUiState(
     val sessionsByDate: Map<LocalDate, List<CalendarSession>> = emptyMap(),
+    val events: Map<LocalDate, List<ExternalSession>> = emptyMap(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null
 )
@@ -31,6 +34,10 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
 
     init {
         loadSessions()
+        val now = ZonedDateTime.now()
+        val startMillis = now.toInstant().toEpochMilli()
+        val endMillis = now.plusMonths(1).toInstant().toEpochMilli()
+        loadExternalEvents(startMillis, endMillis)
     }
 
     /** Call again after creating, cancelling or leaving a session so the calendar stays current. */
@@ -41,7 +48,6 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val sessions = repository.getMySessions()
-                repository.getExternalEvents(System.currentTimeMillis(), System.currentTimeMillis() + 1000000000000000000)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -61,6 +67,34 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
                 _uiState.update {
                     it.copy(isLoading = false, errorMessage = "Can't reach the server. Check your connection.")
                 }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = e.message ?: "Couldn't load sessions.")
+                }
+            }
+        }
+    }
+
+    fun loadExternalEvents(startMillis: Long, endMillis: Long){
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            try {
+                val events = repository.getExternalEvents(startMillis, endMillis)
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        events = events
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e // never swallow coroutine cancellation
+            } catch (e: HttpException) {
+                val message = if (e.code() == 401) {
+                    "Your login has expired. Please log in again."
+                } else {
+                    "Server error (${e.code()}). Please try again."
+                }
+                _uiState.update { it.copy(isLoading = false, errorMessage = message) }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(isLoading = false, errorMessage = e.message ?: "Couldn't load sessions.")

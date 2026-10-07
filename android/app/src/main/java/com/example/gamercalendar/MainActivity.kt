@@ -42,6 +42,17 @@ class MainActivity : ComponentActivity() {
                 1001
             )
         }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_CALENDAR
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.READ_CALENDAR),
+                1001
+            )
+        }
 
         val sessionManager = SessionManager(applicationContext)
         ApiClient.init(sessionManager)
