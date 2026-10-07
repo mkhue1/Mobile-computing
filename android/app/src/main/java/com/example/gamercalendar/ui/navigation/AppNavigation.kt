@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.animation.fadeIn
@@ -17,6 +18,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.gamercalendar.data.repository.UserRepository
+import com.example.gamercalendar.data.session.CurrentUserStore
 import com.example.gamercalendar.ui.components.app.AppBottomBar
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.app.AppTopBar
@@ -30,6 +34,7 @@ import com.example.gamercalendar.ui.feature.home.HomeScreen
 import com.example.gamercalendar.ui.feature.profile.UsersScreen
 import com.example.gamercalendar.ui.feature.sessions.CreateSessionScreen
 import com.example.gamercalendar.ui.feature.sessions.ManageSessionScreen
+import kotlinx.coroutines.CancellationException
 
 
 @Composable
@@ -41,9 +46,23 @@ fun AppNavigation(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    val currentUser by CurrentUserStore.user.collectAsStateWithLifecycle()
+
+    // A cold start with a stored token skips login, so fetch the user here to fill CurrentUserStore.
+    LaunchedEffect(Unit) {
+        try {
+            UserRepository().getCurrentUser()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Keep the default profile icon; screens surface their own errors.
+        }
+    }
+
     AppScaffold(
         topBar = {
             AppTopBar(
+                user = currentUser,
                 onProfileClick = {
                     navController.navigate(Routes.USERS) {
                         launchSingleTop = true
