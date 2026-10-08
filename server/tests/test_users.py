@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import select
 
@@ -175,3 +177,36 @@ def test_search_rejects_limit_out_of_range(client, make_user, auth_headers, limi
     )
 
     assert response.status_code == 422
+
+
+# --- GET /users/{user_id} -----------------------------------------------------
+
+
+def test_get_user_by_id(client, make_user, auth_headers):
+    viewer = make_user("viewer")
+    target = make_user("target")
+
+    response = client.get(f"/users/{target.id}", headers=auth_headers(viewer))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == str(target.id)
+    assert body["username"] == "target"
+    assert "password" not in body
+
+
+def test_get_user_by_id_not_found(client, make_user, auth_headers):
+    response = client.get(
+        f"/users/{uuid4()}",
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 404
+
+
+def test_get_user_by_id_requires_authentication(client, make_user):
+    target = make_user("target")
+
+    response = client.get(f"/users/{target.id}")
+
+    assert response.status_code in (401, 403)

@@ -102,6 +102,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.10.1")
     implementation("androidx.browser:browser:1.8.0")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     // Newer versions (maps-compose 8.4.0+, places 6+) need Kotlin 2.4
     implementation("com.google.maps.android:maps-compose:8.3.1")

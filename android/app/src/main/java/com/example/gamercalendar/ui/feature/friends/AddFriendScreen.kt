@@ -1,11 +1,17 @@
 package com.example.gamercalendar.ui.feature.friends
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -17,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.User
@@ -30,6 +38,8 @@ import com.example.gamercalendar.ui.components.inputs.DefaultTextField
 import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.feature.friends.AddFriendViewModel.Companion.MIN_QUERY_LENGTH
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 
 @Composable
 fun AddFriendScreen(
@@ -37,10 +47,52 @@ fun AddFriendScreen(
     viewModel: AddFriendViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var showQrDialog by remember { mutableStateOf(false) }
+
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val contents = result.contents
+        if (contents != null) {
+            viewModel.onQrScanned(contents)
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            scanLauncher.launch(friendQrScanOptions())
+        } else {
+            Toast.makeText(
+                context,
+                "Camera permission is required to scan QR codes",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    fun startQrScan() {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (granted) {
+            scanLauncher.launch(friendQrScanOptions())
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.load()
+    }
+
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.messageShown()
+        }
     }
 
     ScreenContainer(
@@ -59,6 +111,16 @@ fun AddFriendScreen(
             onClick = { showQrDialog = true },
             enabled = uiState.currentUserId != null
         )
+
+        SecondaryButton(
+            text = "Scan QR code",
+            onClick = ::startQrScan,
+            enabled = !uiState.isResolvingQr
+        )
+
+        if (uiState.isResolvingQr) {
+            LoadingIndicator()
+        }
 
         Text(
             text = "Search by username",
@@ -119,7 +181,38 @@ fun AddFriendScreen(
             )
         }
     }
+
+    uiState.pendingQrConfirmUser?.let { user ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissQrConfirm,
+            title = { Text("Send friend request?") },
+            text = {
+                Text("Send a friend request to ${user.username}?")
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmQrFriendRequest) {
+                    Text(
+                        text = "Send",
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissQrConfirm) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
+
+private fun friendQrScanOptions(): ScanOptions =
+    ScanOptions().apply {
+        setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+        setPrompt("Scan a friend's Roundtable QR code")
+        setBeepEnabled(false)
+        setOrientationLocked(true)
+    }
 
 @Composable
 private fun AddFriendRow(
