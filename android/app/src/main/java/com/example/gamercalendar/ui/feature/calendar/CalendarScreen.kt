@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gamercalendar.data.model.CalendarSession
+import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.ui.feature.calendar.CalendarViewModel
 import com.kizitonwose.calendar.compose.HorizontalCalendar
 import com.kizitonwose.calendar.compose.rememberCalendarState
@@ -220,7 +221,8 @@ fun CalendarScreen(
 
         SelectedDaySessions(
             date = selectedDate,
-            sessions = uiState.sessionsByDate[selectedDate].orEmpty()
+            sessions = uiState.sessionsByDate[selectedDate].orEmpty(),
+            externalSessions = uiState.events[selectedDate].orEmpty()
         )
     }
 }
@@ -356,7 +358,8 @@ private fun DayCell(
 @Composable
 private fun SelectedDaySessions(
     date: LocalDate,
-    sessions: List<CalendarSession>
+    sessions: List<CalendarSession>,
+    externalSessions: List<ExternalSession>,
 ) {
     Text(
         text = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault())),
@@ -373,6 +376,26 @@ private fun SelectedDaySessions(
     } else {
         sessions.forEach { session ->
             SessionCard(session)
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+
+    Text(
+        text = "Other events:",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold
+    )
+    Spacer(Modifier.height(8.dp))
+
+    if (externalSessions.isEmpty()) {
+        Text(
+            text = "No external events",
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    } else {
+        externalSessions.forEach { session ->
+            ExternalSessionCard(session)
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -412,6 +435,27 @@ private fun SessionCard(session: CalendarSession) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ExternalSessionCard(session: ExternalSession) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = session.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "${session.startTime.format(timeFormatter)} \u2013 ${session.endTime.format(timeFormatter)}",
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 }
