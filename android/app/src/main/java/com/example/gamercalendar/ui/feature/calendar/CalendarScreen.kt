@@ -182,6 +182,7 @@ fun CalendarScreen(
                             isInRange = day.position == DayPosition.MonthDate,
                             isSelected = day.date == selectedDate,
                             hasSessions = uiState.sessionsByDate.containsKey(day.date),
+                            hasExternalEvents = uiState.events.containsKey(day.date),
                             onClick = { selectedDate = day.date }
                         )
                     }
@@ -197,6 +198,7 @@ fun CalendarScreen(
                             isInRange = true,
                             isSelected = day.date == selectedDate,
                             hasSessions = uiState.sessionsByDate.containsKey(day.date),
+                            hasExternalEvents = uiState.events.containsKey(day.date),
                             onClick = { selectedDate = day.date }
                         )
                     }
@@ -291,6 +293,7 @@ private fun DayCell(
     isInRange: Boolean,
     isSelected: Boolean,
     hasSessions: Boolean,
+    hasExternalEvents: Boolean,
     onClick: () -> Unit
 ) {
     val isToday = date == LocalDate.now()
@@ -331,6 +334,18 @@ private fun DayCell(
                         .background(
                             if (isSelected) MaterialTheme.colorScheme.onPrimary
                             else MaterialTheme.colorScheme.primary
+                        )
+                )
+            }
+            if (hasExternalEvents && isInRange) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                 )
             }
