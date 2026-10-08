@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
+import kotlin.time.Duration.Companion.milliseconds
 
 data class AddFriendUiState(
     val query: String = "",
@@ -95,7 +97,7 @@ class AddFriendViewModel : ViewModel() {
         _uiState.update { it.copy(query = query, isSearching = true, error = null) }
         searchJob = viewModelScope.launch {
             try {
-                delay(SEARCH_DEBOUNCE_MS)
+                delay(SEARCH_DEBOUNCE_MS.milliseconds)
                 searchResults = userRepository.getUsers(search = trimmed)
                 _uiState.update { it.copy(results = excludeFriends(searchResults)) }
             } catch (e: CancellationException) {
@@ -123,20 +125,20 @@ class AddFriendViewModel : ViewModel() {
         }
 
         val state = _uiState.value
-        when {
-            userId == state.currentUserId -> {
+        when (userId) {
+            state.currentUserId -> {
                 _uiState.update { it.copy(error = "That's your own QR code") }
                 return
             }
-            userId in friendIds -> {
+            in friendIds -> {
                 _uiState.update { it.copy(error = "You're already friends with this user") }
                 return
             }
-            userId in state.sentTo -> {
+            in state.sentTo -> {
                 _uiState.update { it.copy(error = "Friend request already sent") }
                 return
             }
-            userId in state.pendingFromUserIds -> {
+            in state.pendingFromUserIds -> {
                 _uiState.update {
                     it.copy(error = "They already sent you a request — check Requests")
                 }
