@@ -6,10 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.helpers.session import can_view_session
-from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionVisibility, InviteStatus
+from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionType, SessionVisibility, InviteStatus
 from app.models.user import User
 from app.models.user_group import UserGroup, UserGroupMember
-from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, ParticipantResponse, SentInviteResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
+from app.schemas.session import LOCATION_FIELDS, InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, ParticipantResponse, SentInviteResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
 from app.schemas.user import UserResponse
 from app.security import get_current_user
 
@@ -33,6 +33,14 @@ def _require_group_membership(db: Session, group_id: UUID, user_id: UUID) -> Non
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only create sessions for groups you are a member of",
+        )
+
+
+def _require_in_person_location(session_type: SessionType, location_name: str | None) -> None:
+    if session_type == SessionType.IN_PERSON and not (location_name and location_name.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An in-person session needs a location",
         )
 
 
@@ -77,6 +85,8 @@ def create_session(
     if session.group_id is not None:
         _require_group_membership(db, session.group_id, current_user.id)
 
+    _require_in_person_location(session.session_type, session.location_name)
+
     new_session = GamingSession(
         organiser_id=current_user.id,
         game_id=session.game_id,
@@ -89,6 +99,10 @@ def create_session(
         visibility=session.visibility,
         status=SessionStatus.OPEN,
         location_name=session.location_name,
+        location_address=session.location_address,
+        location_place_id=session.location_place_id,
+        location_lat=session.location_lat,
+        location_lng=session.location_lng,
         player_count=1,
         player_limit=session.player_limit,
     )
@@ -517,6 +531,16 @@ def update_session(
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is {session.status.value} and can't be edited")
 
     updates = changes.model_dump(exclude_unset=True)
+
+    # Stops a new location name keeping the previous place's address and coordinates.
+    if updates.keys() & set(LOCATION_FIELDS):
+        for field in LOCATION_FIELDS:
+            updates.setdefault(field, None)
+
+    _require_in_person_location(
+        updates.get("session_type", session.session_type),
+        updates.get("location_name", session.location_name),
+    )
 
     start_at = updates.get("start_at", session.start_at)
     end_at = updates.get("end_at", session.end_at)

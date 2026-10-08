@@ -27,6 +27,7 @@ import com.example.gamercalendar.ui.theme.GamerCalendarTheme
 import com.example.gamercalendar.ui.feature.auth.AuthViewModel
 import com.example.gamercalendar.util.SteamLinkEvent
 import com.example.gamercalendar.util.SteamLinkEvents
+import com.google.android.libraries.places.api.Places
 
 class MainActivity : ComponentActivity() {
 
@@ -48,6 +49,10 @@ class MainActivity : ComponentActivity() {
         }
 
         handleSteamDeepLink(intent)
+
+        if (BuildConfig.GOOGLE_MAPS_API_KEY.isNotBlank() && !Places.isInitialized()) {
+            Places.initializeWithNewPlacesApiEnabled(applicationContext, BuildConfig.GOOGLE_MAPS_API_KEY)
+        }
 
         val sessionManager = SessionManager(applicationContext)
         ApiClient.init(sessionManager)
