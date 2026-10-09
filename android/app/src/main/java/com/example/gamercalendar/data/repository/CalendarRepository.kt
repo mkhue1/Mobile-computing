@@ -13,9 +13,11 @@ class CalendarRepository(private val api: ApiService) {
     /** Loads the user's sessions, excluding cancel ones, sorted by date and start time. */
     suspend fun getMySessions(): List<CalendarSession> {
         val zone = ZoneId.systemDefault()
+        val now = System.currentTimeMillis()
         return api.getSessions()
             .filter { it.status != SessionStatus.CANCELLED }
             .map { it.toCalendarSession(zone) }
+            .filter { it.endEpochMillis > now }
             .sortedWith(compareBy({ it.date }, { it.startTime }))
     }
 
@@ -35,6 +37,9 @@ class CalendarRepository(private val api: ApiService) {
             date = start.toLocalDate(),
             startTime = start.toLocalTime(),
             endTime = end.toLocalTime(),
+            session = this,
+            startEpochMillis = start.toInstant().toEpochMilli(),
+            endEpochMillis = end.toInstant().toEpochMilli(),
             isOnline = session_type == SessionType.ONLINE,
             locationName = location_name,
             playerCount = player_count,

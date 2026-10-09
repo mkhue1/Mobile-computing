@@ -66,12 +66,18 @@ fun AppNavigation(
                     // bring back screens stacked on top of them, such as Create session or Add friend.
                     val resetsToRoot = route == Routes.ITEM_1 || route == Routes.FRIENDS_HUB
 
-                    navController.navigate(route) {
-                        launchSingleTop = true
-                        restoreState = !resetsToRoot
+                    // If this tab is already underneath the current screen (for example Calendar underneath
+                    // Manage session), go back to it. Its state, such as the selected day, is kept.
+                    val returnedToTab = !resetsToRoot && navController.popBackStack(route, inclusive = false)
 
-                        popUpTo(Routes.ITEM_1) {
-                            saveState = !resetsToRoot
+                    if (!returnedToTab) {
+                        navController.navigate(route) {
+                            launchSingleTop = true
+                            restoreState = !resetsToRoot
+
+                            popUpTo(Routes.ITEM_1) {
+                                saveState = !resetsToRoot
+                            }
                         }
                     }
                 }
@@ -151,7 +157,11 @@ fun AppNavigation(
 
             composable(Routes.ITEM_2) {
                 val calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory())
-                CalendarScreen(viewModel = calendarViewModel)
+                CalendarScreen(
+                    viewModel = calendarViewModel,
+                    onSessionClick = { sessionId -> navController.navigate(Routes.manageSession(sessionId))
+                    }
+                )
             }
 
             composable(Routes.USERS) {

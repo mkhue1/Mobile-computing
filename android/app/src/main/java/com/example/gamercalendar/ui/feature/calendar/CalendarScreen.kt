@@ -1,13 +1,11 @@
 package com.example.gamercalendar.ui.feature.calendar
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,13 +13,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,181 +26,50 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.CalendarSession
-import com.example.gamercalendar.ui.feature.calendar.CalendarViewModel
-import com.kizitonwose.calendar.compose.HorizontalCalendar
-import com.kizitonwose.calendar.compose.rememberCalendarState
-import com.kizitonwose.calendar.compose.WeekCalendar
-import com.kizitonwose.calendar.compose.weekcalendar.rememberWeekCalendarState
-import com.kizitonwose.calendar.core.DayPosition
-import com.kizitonwose.calendar.core.daysOfWeek
-import kotlinx.coroutines.launch
-import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.YearMonth
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
-import java.time.format.TextStyle
-import java.util.Locale
-
-private val timeFormatter: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
-
-private enum class CalendarViewMode(val label: String) {
-    MONTH("Month"),
-    WEEK("Week")
-}
 
 @Composable
 fun CalendarScreen(
     viewModel: CalendarViewModel,
+    onSessionClick: (sessionId: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val viewMode by viewModel.viewMode.collectAsState()
 
-    val currentMonth = remember { YearMonth.now() }
-    val startMonth = remember { currentMonth.minusMonths(12) }
-    val endMonth = remember { currentMonth.plusMonths(12) }
-    val rangeStart = remember { startMonth.atDay(1) }
-    val rangeEnd = remember { endMonth.atEndOfMonth() }
-    val weekDays = remember { daysOfWeek() }
-
-    val monthState = rememberCalendarState(
-        startMonth = startMonth,
-        endMonth = endMonth,
-        firstVisibleMonth = currentMonth,
-        firstDayOfWeek = weekDays.first()
-    )
-    val weekState = rememberWeekCalendarState(
-        startDate = rangeStart,
-        endDate = rangeEnd,
-        firstVisibleWeekDate = LocalDate.now(),
-        firstDayOfWeek = weekDays.first()
-    )
-
-    val coroutineScope = rememberCoroutineScope()
-    var viewMode by remember { mutableStateOf(CalendarViewMode.MONTH) } // month is the default
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-
-    // When the view changes, jump the new view to the day the user had selected.
-    LaunchedEffect(viewMode) {
-        when (viewMode) {
-            CalendarViewMode.MONTH ->
-                monthState.scrollToMonth(YearMonth.from(selectedDate).coerceIn(startMonth, endMonth))
-            CalendarViewMode.WEEK ->
-                weekState.scrollToWeek(selectedDate.coerceIn(rangeStart, rangeEnd))
-        }
-    }
-
-    val visibleMonth = monthState.firstVisibleMonth.yearMonth
-    val headerTitle = when (viewMode) {
-        CalendarViewMode.MONTH -> monthTitle(visibleMonth)
-        CalendarViewMode.WEEK -> {
-            val days = weekState.firstVisibleWeek.days
-            rangeTitle(days.first().date, days.last().date)
-        }
-    }
-
-    val onPrevious: () -> Unit = {
-        coroutineScope.launch {
-            when (viewMode) {
-                CalendarViewMode.MONTH -> {
-                    if (visibleMonth.isAfter(startMonth)) {
-                        monthState.animateScrollToMonth(visibleMonth.minusMonths(1))
-                    }
-                }
-                CalendarViewMode.WEEK -> {
-                    val weekStart = weekState.firstVisibleWeek.days.first().date
-                    if (weekStart.isAfter(rangeStart)) {
-                        weekState.animateScrollToWeek(weekStart.minusWeeks(1).coerceAtLeast(rangeStart))
-                    }
-                }
-            }
-        }
-    }
-
-    val onNext: () -> Unit = {
-        coroutineScope.launch {
-            when (viewMode) {
-                CalendarViewMode.MONTH -> {
-                    if (visibleMonth.isBefore(endMonth)) {
-                        monthState.animateScrollToMonth(visibleMonth.plusMonths(1))
-                    }
-                }
-                CalendarViewMode.WEEK -> {
-                    val nextWeekStart = weekState.firstVisibleWeek.days.first().date.plusWeeks(1)
-                    if (!nextWeekStart.isAfter(rangeEnd)) {
-                        weekState.animateScrollToWeek(nextWeekStart)
-                    }
-                }
-            }
-        }
-    }
+    // The calendar leaves composition while a session's details are open, so this runs again
+    // each time the user comes back and picks up any edits, cancellations or leaves.
+    LaunchedEffect(Unit) { viewModel.refresh() }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(
+                horizontal = if (viewMode == CalendarViewMode.WEEK) 8.dp else 16.dp,
+                vertical = 16.dp
+            )
     ) {
         ViewModeSelector(
             selected = viewMode,
-            onSelect = { viewMode = it }
+            onSelect = viewModel::setViewMode
         )
         Spacer(Modifier.height(12.dp))
-
-        CalendarHeader(
-            title = headerTitle,
-            onPrevious = onPrevious,
-            onNext = onNext
-        )
-        Spacer(Modifier.height(12.dp))
-
-        WeekdayLabels(weekDays)
-        Spacer(Modifier.height(8.dp))
-
-        when (viewMode) {
-            CalendarViewMode.MONTH -> {
-                HorizontalCalendar(
-                    state = monthState,
-                    dayContent = { day ->
-                        DayCell(
-                            date = day.date,
-                            isInRange = day.position == DayPosition.MonthDate,
-                            isSelected = day.date == selectedDate,
-                            hasSessions = uiState.sessionsByDate.containsKey(day.date),
-                            onClick = { selectedDate = day.date }
-                        )
-                    }
-                )
-            }
-
-            CalendarViewMode.WEEK -> {
-                WeekCalendar(
-                    state = weekState,
-                    dayContent = { day ->
-                        DayCell(
-                            date = day.date,
-                            isInRange = true,
-                            isSelected = day.date == selectedDate,
-                            hasSessions = uiState.sessionsByDate.containsKey(day.date),
-                            onClick = { selectedDate = day.date }
-                        )
-                    }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
 
         if (uiState.isLoading) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -216,11 +81,39 @@ fun CalendarScreen(
             Spacer(Modifier.height(12.dp))
         }
 
-        SelectedDaySessions(
-            date = selectedDate,
-            sessions = uiState.sessionsByDate[selectedDate].orEmpty()
-        )
+        when (viewMode) {
+            CalendarViewMode.MONTH -> MonthTab(calendar = viewModel, onSessionClick = onSessionClick)
+            CalendarViewMode.WEEK -> WeekTab(calendar = viewModel, onSessionClick = onSessionClick)
+        }
     }
+}
+
+// Each view gets its own view model, built on the shared one. They live as long as the
+// calendar's place in the back stack, so a view keeps its state while the other one is showing.
+@Composable
+private fun MonthTab(
+    calendar: CalendarViewModel,
+    onSessionClick: (sessionId: String) -> Unit
+) {
+    val monthViewModel: MonthViewModel = viewModel(factory = MonthViewModelFactory(calendar))
+    MonthScreen(
+        viewModel = monthViewModel,
+        onSelectDate = calendar::selectDate,
+        onSessionClick = onSessionClick
+    )
+}
+
+@Composable
+private fun WeekTab(
+    calendar: CalendarViewModel,
+    onSessionClick: (sessionId: String) -> Unit
+) {
+    val weekViewModel: WeekViewModel = viewModel(factory = WeekViewModelFactory(calendar))
+    WeekScreen(
+        viewModel = weekViewModel,
+        onSelectDate = calendar::selectDate,
+        onSessionClick = onSessionClick
+    )
 }
 
 @Composable
@@ -243,7 +136,7 @@ private fun ViewModeSelector(
 }
 
 @Composable
-private fun CalendarHeader(
+internal fun CalendarHeader(
     title: String,
     onPrevious: () -> Unit,
     onNext: () -> Unit
@@ -269,148 +162,6 @@ private fun CalendarHeader(
 }
 
 @Composable
-private fun WeekdayLabels(weekDays: List<DayOfWeek>) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        weekDays.forEach { day ->
-            Text(
-                text = day.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(),
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-/** One day in the month or week grid. [isInRange] is false for the faded days of neighbouring months. */
-@Composable
-private fun DayCell(
-    date: LocalDate,
-    isInRange: Boolean,
-    isSelected: Boolean,
-    hasSessions: Boolean,
-    onClick: () -> Unit
-) {
-    val isToday = date == LocalDate.now()
-
-    Box(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .padding(2.dp)
-            .clip(CircleShape)
-            .background(
-                when {
-                    isSelected -> MaterialTheme.colorScheme.primary
-                    isToday -> MaterialTheme.colorScheme.primaryContainer
-                    else -> Color.Transparent
-                }
-            )
-            .clickable(enabled = isInRange, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = date.dayOfMonth.toString(),
-                fontSize = 14.sp,
-                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = when {
-                    isSelected -> MaterialTheme.colorScheme.onPrimary
-                    !isInRange -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
-                    isToday -> MaterialTheme.colorScheme.onPrimaryContainer
-                    else -> MaterialTheme.colorScheme.onSurface
-                }
-            )
-            if (hasSessions && isInRange) {
-                Box(
-                    modifier = Modifier
-                        .padding(top = 2.dp)
-                        .size(5.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isSelected) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.primary
-                        )
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SelectedDaySessions(
-    date: LocalDate,
-    sessions: List<CalendarSession>
-) {
-    Text(
-        text = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault())),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold
-    )
-    Spacer(Modifier.height(8.dp))
-
-    if (sessions.isEmpty()) {
-        Text(
-            text = "No sessions on this day",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    } else {
-        sessions.forEach { session ->
-            SessionCard(session)
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
-
-@Composable
-private fun SessionCard(session: CalendarSession) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = session.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "${session.gameName} \u00B7 ${if (session.isOnline) "Online" else "In person"}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "${session.startTime.format(timeFormatter)} \u2013 ${session.endTime.format(timeFormatter)}",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Text(
-                text = playersLabel(session),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            session.locationName?.let { location ->
-                Text(
-                    text = location,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-private fun playersLabel(session: CalendarSession): String {
-    val limit = session.playerLimit
-    return when {
-        limit != null -> "${session.playerCount}/$limit players"
-        session.playerCount == 1 -> "1 player"
-        else -> "${session.playerCount} players"
-    }
-}
-
-@Composable
 private fun ErrorBanner(
     message: String,
     onRetry: () -> Unit
@@ -431,12 +182,109 @@ private fun ErrorBanner(
     }
 }
 
-private fun monthTitle(month: YearMonth): String =
-    "${month.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${month.year}"
+// Shared by the Month and Week views.
 
-private fun rangeTitle(start: LocalDate, end: LocalDate): String {
-    val locale = Locale.getDefault()
-    val startText = start.format(DateTimeFormatter.ofPattern("d MMM", locale))
-    val endText = end.format(DateTimeFormatter.ofPattern("d MMM yyyy", locale))
-    return "$startText \u2013 $endText"
+// Each game gets one of these colours, so sessions of the same game look alike at a glance.
+private val GAME_COLORS = listOf(
+    Color(0xFFEE5428), // orange
+    Color(0xFFDD55B5), // magenta
+    Color(0xFF99CC55), // green
+    Color(0xFF4F7AE3), // blue
+    Color(0xFFF2A93B), // amber
+    Color(0xFF3FB8AF), // teal
+    Color(0xFF9B6BDF), // purple
+    Color(0xFFE5646E)  // coral
+)
+
+internal fun gameColor(session: CalendarSession): Color =
+    GAME_COLORS[Math.floorMod(session.gameName.hashCode(), GAME_COLORS.size)]
+
+/** Dark text on light colours and white text on dark ones, for readable contrast. */
+internal fun readableOn(background: Color): Color =
+    if (background.luminance() > 0.179f) Color(0xFF1B1B1F) else Color.White
+
+/**
+ * Text that never splits a word across two lines. Compose breaks a word that is wider than the
+ * available width, giving "Teamfigh" / "t Tactics". This lays the text out normally, checks
+ * whether a word was split, and if so shrinks the font a little and lays it out again, until no
+ * word is split or [minFontSize] is reached. It looks at the real layout, so it is correct for
+ * whatever font and font scale the app is using.
+ */
+@Composable
+internal fun WordSafeText(
+    text: String,
+    fontSize: TextUnit,
+    minFontSize: TextUnit,
+    maxLines: Int,
+    color: Color,
+    modifier: Modifier = Modifier,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    fontWeight: FontWeight? = null
+) {
+    var size by remember(text, fontSize) { mutableStateOf(fontSize) }
+
+    Text(
+        text = text,
+        modifier = modifier,
+        fontSize = size,
+        lineHeight = lineHeight,
+        fontWeight = fontWeight,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        color = color,
+        onTextLayout = { layout ->
+            if (size.value > minFontSize.value && layout.splitsAWord(text)) {
+                size = (size.value - 0.5f).sp
+            }
+        }
+    )
+}
+
+/** True if any line ends in the middle of a word (not at a space or after a hyphen). */
+private fun TextLayoutResult.splitsAWord(text: String): Boolean {
+    for (line in 0 until lineCount - 1) {
+        val end = getLineEnd(line)
+        if (end in 1 until text.length &&
+            !text[end - 1].isWhitespace() && text[end - 1] != '-' &&
+            !text[end].isWhitespace()
+        ) {
+            return true
+        }
+    }
+    return false
+}
+
+@Composable
+internal fun DayNumber(
+    date: LocalDate,
+    isInRange: Boolean,
+    isSelected: Boolean
+) {
+    val isToday = date == LocalDate.now()
+
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .background(
+                when {
+                    isSelected -> MaterialTheme.colorScheme.primary
+                    isToday -> MaterialTheme.colorScheme.primaryContainer
+                    else -> Color.Transparent
+                }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = date.dayOfMonth.toString(),
+            fontSize = 12.sp,
+            fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
+            color = when {
+                isSelected -> MaterialTheme.colorScheme.onPrimary
+                !isInRange -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                isToday -> MaterialTheme.colorScheme.onPrimaryContainer
+                else -> MaterialTheme.colorScheme.onSurface
+            }
+        )
+    }
 }
