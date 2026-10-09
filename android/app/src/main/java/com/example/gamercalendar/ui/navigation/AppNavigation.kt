@@ -151,7 +151,7 @@ fun AppNavigation(
             }
 
             composable(Routes.ITEM_2) {
-                val calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory(contentResolver = LocalContext.current.contentResolver))
+                val calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory(contentResolver = LocalContext.current.applicationContext.contentResolver))
                 CalendarScreen(viewModel = calendarViewModel)
             }
 

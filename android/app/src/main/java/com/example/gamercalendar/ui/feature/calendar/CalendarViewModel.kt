@@ -45,7 +45,10 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
     }
 
     /** Call again after creating, cancelling or leaving a session so the calendar stays current. */
-    fun refresh() = loadSessions()
+    fun refresh() {
+        loadSessions()
+        loadedAround = null
+    }
 
     private fun loadSessions() {
         viewModelScope.launch {
@@ -69,11 +72,17 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
                 _uiState.update { it.copy(isLoading = false, errorMessage = message) }
             } catch (e: IOException) {
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = "Can't reach the server. Check your connection.")
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Can't reach the server. Check your connection."
+                    )
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = e.message ?: "Couldn't load sessions.")
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Couldn't load sessions."
+                    )
                 }
             }
         }
@@ -86,12 +95,14 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
         }
         val zone = ZoneId.systemDefault()
         val start = month.minusMonths(1).atDay(1).atStartOfDay(zone)   // 1st of previous month
-        val end = month.plusMonths(2).atDay(1).atStartOfDay(zone)      // 1st of the month after next
+        val end =
+            month.plusMonths(2).atDay(1).atStartOfDay(zone)      // 1st of the month after next
         loadExternalEvents(start.toInstant().toEpochMilli(), end.toInstant().toEpochMilli())
         loadedAround = month
+
     }
 
-    fun loadExternalEvents(startMillis: Long, endMillis: Long){
+    fun loadExternalEvents(startMillis: Long, endMillis: Long) {
         eventJob?.cancel()
         eventJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -105,17 +116,17 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
                 }
             } catch (e: CancellationException) {
                 throw e // never swallow coroutine cancellation
-            } catch (e: HttpException) {
-                val message = if (e.code() == 401) {
-                    "Your login has expired. Please log in again."
-                } else {
-                    "Server error (${e.code()}). Please try again."
-                }
-                _uiState.update { it.copy(isLoading = false, errorMessage = message) }
+            } catch (e: SecurityException) {
+                loadedAround = null
+                _uiState.update { it.copy(events = emptyMap(), isLoading = false) }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = e.message ?: "Couldn't load sessions.")
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Couldn't load external events."
+                    )
                 }
+                loadedAround = null
             }
         }
     }

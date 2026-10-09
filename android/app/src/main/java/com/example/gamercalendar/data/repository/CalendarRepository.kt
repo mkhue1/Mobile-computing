@@ -11,6 +11,8 @@ import com.example.gamercalendar.data.api.ApiService
 import com.example.gamercalendar.data.model.CalendarSession
 import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.model.GamingSession
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -71,44 +73,46 @@ class CalendarRepository(private val api: ApiService, private val contentResolve
         )
     }
 
-    fun getExternalEvents(startMillis: Long, endMillis: Long): Map<LocalDate, List<ExternalSession>> {
-        // calendar instance search needs to provide start and end time for search and add it to URI path
-        val builder: Uri.Builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
-        ContentUris.appendId(builder, startMillis)
-        ContentUris.appendId(builder, endMillis)
-        val localZone = ZoneId.systemDefault()
-        val eventList = mutableListOf<ExternalSession>()
-        // search for all instances, close cursor if error
-        contentResolver.query(builder.build(), EVENT_PROJECTION, null, null, null)?.use { cur ->
-            while (cur.moveToNext()) {
-                // get key instance values
-                val eventID: Long = cur.getLong(PROJECTION_ID_INDEX)
-                val beginVal: Long = cur.getLong(PROJECTION_BEGIN_INDEX)
-                val endVal: Long = cur.getLong(PROJECTION_END_INDEX)
-                val title: String? = cur.getString(PROJECTION_TITLE_INDEX)
-                val isAllDay: Boolean = cur.getInt(PROJECTION_ALL_DAY_INDEX) == 1
+    suspend fun getExternalEvents(startMillis: Long, endMillis: Long): Map<LocalDate, List<ExternalSession>> {
+        return withContext(Dispatchers.IO) {
+            // calendar instance search needs to provide start and end time for search and add it to URI path
+            val builder: Uri.Builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
+            ContentUris.appendId(builder, startMillis)
+            ContentUris.appendId(builder, endMillis)
+            val localZone = ZoneId.systemDefault()
+            val eventList = mutableListOf<ExternalSession>()
+            // search for all instances, close cursor if error
+            contentResolver.query(builder.build(), EVENT_PROJECTION, null, null, null)?.use { cur ->
+                while (cur.moveToNext()) {
+                    // get key instance values
+                    val eventID: Long = cur.getLong(PROJECTION_ID_INDEX)
+                    val beginVal: Long = cur.getLong(PROJECTION_BEGIN_INDEX)
+                    val endVal: Long = cur.getLong(PROJECTION_END_INDEX)
+                    val title: String? = cur.getString(PROJECTION_TITLE_INDEX)
+                    val isAllDay: Boolean = cur.getInt(PROJECTION_ALL_DAY_INDEX) == 1
 
-                // all-day events are stored as midnight UTC, so don't convert them into local tiemzone
-                val zone = if (isAllDay) ZoneOffset.UTC else localZone
-                val start = Instant.ofEpochMilli(beginVal).atZone(zone)
-                val end = Instant.ofEpochMilli(endVal).atZone(zone)
+                    // all-day events are stored as midnight UTC, so don't convert them into local tiemzone
+                    val zone = if (isAllDay) ZoneOffset.UTC else localZone
+                    val start = Instant.ofEpochMilli(beginVal).atZone(zone)
+                    val end = Instant.ofEpochMilli(endVal).atZone(zone)
 
-                // Log fetched instances
-                Log.i("INFO", "Event: $title, start: $start, end: $end")
-                eventList.add(
-                    ExternalSession(
-                        id = eventID.toString(),
-                        title = title ?: "",
-                        date = start.toLocalDate(),
-                        startTime = start.toLocalTime(),
-                        endTime = end.toLocalTime()
+                    // Log fetched instances
+                    Log.i("INFO", "Event: $title, start: $start, end: $end")
+                    eventList.add(
+                        ExternalSession(
+                            id = eventID.toString(),
+                            title = title ?: "",
+                            date = start.toLocalDate(),
+                            startTime = start.toLocalTime(),
+                            endTime = end.toLocalTime()
+                        )
                     )
-                )
+                }
             }
+             eventList
+                .sortedWith(compareBy({ it.date }, { it.startTime }))
+                .groupBy { it.date }
         }
-        return eventList
-            .sortedWith(compareBy({ it.date }, { it.startTime }))
-            .groupBy { it.date }
     }
 
 
