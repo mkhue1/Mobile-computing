@@ -10,6 +10,7 @@ import com.example.gamercalendar.data.model.CalendarSession
 import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.repository.CalendarRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +19,8 @@ import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.io.IOException
 import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneId
 import java.time.ZonedDateTime
 
 data class CalendarUiState(
@@ -30,14 +33,15 @@ data class CalendarUiState(
 class CalendarViewModel(private val repository: CalendarRepository) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CalendarUiState())
+    private var loadedAround: YearMonth? = null
+    private var eventJob: Job? = null
     val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
 
     init {
         loadSessions()
         val now = ZonedDateTime.now()
-        val startMillis = now.toInstant().toEpochMilli()
-        val endMillis = now.plusMonths(1).toInstant().toEpochMilli()
-        loadExternalEvents(startMillis, endMillis)
+        loadEventsAround(YearMonth.now())
+        loadedAround = YearMonth.now()
     }
 
     /** Call again after creating, cancelling or leaving a session so the calendar stays current. */
@@ -75,8 +79,21 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
         }
     }
 
+    fun loadEventsAround(month: YearMonth) {
+        // don't load data again if it's the currently loaded set
+        if (month == loadedAround) {
+            return
+        }
+        val zone = ZoneId.systemDefault()
+        val start = month.minusMonths(1).atDay(1).atStartOfDay(zone)   // 1st of previous month
+        val end = month.plusMonths(2).atDay(1).atStartOfDay(zone)      // 1st of the month after next
+        loadExternalEvents(start.toInstant().toEpochMilli(), end.toInstant().toEpochMilli())
+        loadedAround = month
+    }
+
     fun loadExternalEvents(startMillis: Long, endMillis: Long){
-        viewModelScope.launch {
+        eventJob?.cancel()
+        eventJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val events = repository.getExternalEvents(startMillis, endMillis)

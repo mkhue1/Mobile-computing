@@ -115,6 +115,17 @@ fun CalendarScreen(
         }
     }
 
+    // when viewmode changes to week, maintain record of current month
+    val anchorMonth = when (viewMode) {
+        CalendarViewMode.MONTH -> visibleMonth
+        CalendarViewMode.WEEK -> YearMonth.from(weekState.firstVisibleWeek.days.first().date)
+    }
+
+    LaunchedEffect(anchorMonth) {
+        viewModel.loadEventsAround(anchorMonth)
+    }
+
+
     val onPrevious: () -> Unit = {
         coroutineScope.launch {
             when (viewMode) {
