@@ -10,14 +10,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import com.example.gamercalendar.data.model.User
+import com.example.gamercalendar.ui.components.labels.UserAvatar
 
 /**
  * Standard top app bar used throughout the app.
- * Displays the Roundtable branding and a profile action.
+ * Displays the Roundtable branding and a profile action, which shows the user's avatar once known.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppTopBar(
+    user: User? = null,
     onProfileClick: () -> Unit = {}
 ) {
     TopAppBar(
@@ -31,10 +38,18 @@ fun AppTopBar(
             IconButton(
                 onClick = onProfileClick
             ) {
-                Icon(
-                    imageVector = Icons.Default.AccountCircle,
-                    contentDescription = "Profile"
-                )
+                if (user != null) {
+                    UserAvatar(
+                        user = user,
+                        size = 32.dp,
+                        modifier = Modifier.semantics { contentDescription = "Profile" }
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.AccountCircle,
+                        contentDescription = "Profile"
+                    )
+                }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(

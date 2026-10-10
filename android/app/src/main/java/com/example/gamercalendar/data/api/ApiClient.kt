@@ -29,7 +29,7 @@ object ApiClient {
         chain.proceed(request)
     }
 
-    private val okHttpClient: OkHttpClient by lazy {
+    internal val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
             .build()

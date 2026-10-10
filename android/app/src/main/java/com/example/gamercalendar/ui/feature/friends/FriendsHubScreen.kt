@@ -35,6 +35,7 @@ import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.ui.components.labels.Tag
+import com.example.gamercalendar.ui.components.labels.UserAvatar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 
 private val TAB_TITLES = listOf("Friends", "Requests", "Groups")
@@ -68,7 +69,7 @@ fun FriendsHubScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                text = "Friends & groups",
+                text = "Friends & Groups",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground
             )
@@ -192,11 +193,19 @@ private fun FriendRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = friend.username,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                UserAvatar(user = friend)
+
+                Text(
+                    text = friend.username,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
 
             TextButton(onClick = onRemoveClick) {
                 Text(text = "Remove", color = MaterialTheme.colorScheme.error)
@@ -281,18 +290,24 @@ private fun IncomingRequestRow(
     onDecline: () -> Unit
 ) {
     AppCard {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                UserAvatar(user = requestUi.otherUser)
+
                 Text(
                     text = requestUi.otherUser?.username ?: "Unknown user",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f, fill = false)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
+            }
 
                 Row {
                     TextButton(onClick = onAccept) {
@@ -344,11 +359,19 @@ private fun OutgoingRequestRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = requestUi.otherUser?.username ?: "Unknown user",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                UserAvatar(user = requestUi.otherUser)
+
+                Text(
+                    text = requestUi.otherUser?.username ?: "Unknown user",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
 
             Tag(text = "Pending")
         }

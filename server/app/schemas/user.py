@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -46,6 +47,8 @@ class UserResponse(BaseModel):
     email: EmailStr
     username: str
     steam_linked: bool = False
+    # null means no profile picture; the image itself is served by GET /users/{id}/avatar
+    avatar_updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
