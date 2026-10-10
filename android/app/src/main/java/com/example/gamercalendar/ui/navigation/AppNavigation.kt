@@ -1,7 +1,5 @@
 package com.example.gamercalendar.ui.navigation
 
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,11 +19,18 @@ import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gamercalendar.data.repository.UserRepository
 import com.example.gamercalendar.data.session.CurrentUserStore
+import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gamercalendar.ui.feature.calendar.CalendarScreen
+import com.example.gamercalendar.ui.feature.calendar.CalendarViewModel
+import com.example.gamercalendar.ui.feature.calendar.CalendarViewModelFactory
+import com.example.gamercalendar.ui.feature.search.SearchScreen
+import com.example.gamercalendar.ui.feature.search.SearchViewModel
+import com.example.gamercalendar.ui.feature.search.SearchViewModelFactory
 import com.example.gamercalendar.ui.components.app.AppBottomBar
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.app.AppTopBar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
-import com.example.gamercalendar.ui.debug.CardTestScreen
 import com.example.gamercalendar.ui.feature.auth.AuthViewModel
 import com.example.gamercalendar.ui.feature.friends.AddFriendScreen
 import com.example.gamercalendar.ui.feature.friends.FriendsHubScreen
@@ -83,12 +88,18 @@ fun AppNavigation(
                     // bring back screens stacked on top of them, such as Create session or Add friend.
                     val resetsToRoot = route == Routes.ITEM_1 || route == Routes.FRIENDS_HUB
 
-                    navController.navigate(route) {
-                        launchSingleTop = true
-                        restoreState = !resetsToRoot
+                    // If this tab is already underneath the current screen (for example Calendar underneath
+                    // Manage session), go back to it. Its state, such as the selected day, is kept.
+                    val returnedToTab = !resetsToRoot && navController.popBackStack(route, inclusive = false)
 
-                        popUpTo(Routes.ITEM_1) {
-                            saveState = !resetsToRoot
+                    if (!returnedToTab) {
+                        navController.navigate(route) {
+                            launchSingleTop = true
+                            restoreState = !resetsToRoot
+
+                            popUpTo(Routes.ITEM_1) {
+                                saveState = !resetsToRoot
+                            }
                         }
                     }
                 }
@@ -167,7 +178,12 @@ fun AppNavigation(
             }
 
             composable(Routes.ITEM_2) {
-                CardTestScreen()
+                val calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory())
+                CalendarScreen(
+                    viewModel = calendarViewModel,
+                    onSessionClick = { sessionId -> navController.navigate(Routes.manageSession(sessionId))
+                    }
+                )
             }
 
             composable(Routes.USERS) {
@@ -183,8 +199,10 @@ fun AppNavigation(
             }
 
             composable(Routes.ITEM_5) {
-                PlaceholderScreen(
-                    text = "Item 5"
+                val searchViewModel: SearchViewModel = viewModel(factory = SearchViewModelFactory())
+                SearchScreen(
+                    viewModel = searchViewModel,
+                    onSessionClick = { sessionId -> navController.navigate(Routes.manageSession(sessionId)) }
                 )
             }
 

@@ -1,13 +1,14 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, select, func, update
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.helpers.session import can_view_session
 from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionType, SessionVisibility, InviteStatus
 from app.models.user import User
+from app.models.game import Game
 from app.models.user_group import UserGroup, UserGroupMember
 from app.schemas.session import LOCATION_FIELDS, InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, ParticipantResponse, SentInviteResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
 from app.schemas.user import UserResponse
@@ -63,6 +64,96 @@ def get_sessions(
     )
 
     return db.scalars(statement).all()
+
+@router.get(
+    "/public",
+    response_model=list[SessionResponse],
+)
+def search_public_sessions(
+    q: str | None = Query(
+        default=None,
+        max_length=100,
+        description="Matches against the game name or the session title",
+    ),
+    limit: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Sessions the user is already in are left out, since there is nothing left to join.
+    already_in = select(SessionParticipant.session_id).where(
+        SessionParticipant.user_id == current_user.id
+    )
+
+    statement = (
+        select(GamingSession)
+        .join(Game, Game.id == GamingSession.game_id)
+        .where(
+            # Only public, open sessions that haven't finished are ever returned, so private,
+            # friends and group sessions can't leak through search.
+            GamingSession.visibility == SessionVisibility.PUBLIC,
+            GamingSession.status == SessionStatus.OPEN,
+            GamingSession.end_at > func.now(),
+            GamingSession.id.not_in(already_in),
+        )
+        .order_by(GamingSession.start_at)
+        .limit(limit)
+    )
+
+    term = (q or "").strip()
+    if term:
+        # autoescape stops a typed % or _ from acting as a wildcard.
+        statement = statement.where(
+            or_(
+                Game.name.icontains(term, autoescape=True),
+                GamingSession.title.icontains(term, autoescape=True),
+            )
+        )
+
+    return db.scalars(statement).all()
+
+
+@router.post(
+    "/{session_id}/join",
+    response_model=SessionResponse,
+)
+def join_public_session(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Locked so two people taking the last place at the same moment can't both get it.
+    session = db.scalars(
+        select(GamingSession).where(GamingSession.id == session_id).with_for_update()
+    ).one_or_none()
+
+    # 404 rather than 403 so a private session isn't revealed to exist.
+    if session is None or session.visibility != SessionVisibility.PUBLIC:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Session {session_id} does not exist")
+    if session.status != SessionStatus.OPEN:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is {session.status.value} and can't be joined")
+    if db.get(SessionParticipant, (session_id, current_user.id)) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="You're already in this session")
+    if session.player_limit is not None and session.player_count >= session.player_limit:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is full")
+
+
+    db.add(SessionParticipant(session_id=session_id, user_id=current_user.id))
+    session.player_count += 1
+
+    # If the user had been invited as well, that invite is now settled.
+    db.execute(
+        update(SessionInvite)
+        .where(
+            SessionInvite.session_id == session_id,
+            SessionInvite.receiver_id == current_user.id,
+            SessionInvite.status == InviteStatus.PENDING,
+        )
+        .values(status=InviteStatus.ACCEPTED, responded_at=func.now())
+    )
+
+    db.commit()
+    db.refresh(session)
+    return session
 
 
 @router.post(
