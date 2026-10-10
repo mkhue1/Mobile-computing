@@ -54,7 +54,7 @@ import com.example.gamercalendar.ui.components.dialogs.ConfirmDialog
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
-import com.example.gamercalendar.ui.components.labels.Avatar
+import com.example.gamercalendar.ui.components.labels.UserAvatar
 import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.components.layout.SectionTitle
@@ -382,7 +382,7 @@ private fun PlayerRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(name = user.username)
+        UserAvatar(user = user)
 
         Text(
             text = user.username,
@@ -422,7 +422,7 @@ private fun InvitedRow(user: User) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(name = user.username)
+        UserAvatar(user = user)
 
         Text(
             text = user.username,
@@ -500,7 +500,7 @@ private fun InviteFriendsSheet(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Avatar(name = friend.username)
+                                UserAvatar(user = friend)
                                 Text(
                                     text = friend.username,
                                     style = MaterialTheme.typography.bodyLarge,
