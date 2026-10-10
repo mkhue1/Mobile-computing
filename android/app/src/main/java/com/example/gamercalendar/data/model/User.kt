@@ -3,7 +3,8 @@ package com.example.gamercalendar.data.model
 data class User(
     val id: String,
     val username: String,
-    val email: String
+    val email: String,
+    val avatar_updated_at: String? = null
 )
 
 data class UserCreate(

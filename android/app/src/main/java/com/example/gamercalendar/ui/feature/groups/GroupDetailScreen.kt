@@ -35,8 +35,8 @@ import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.ui.components.inputs.DefaultTextField
-import com.example.gamercalendar.ui.components.labels.Avatar
 import com.example.gamercalendar.ui.components.labels.Tag
+import com.example.gamercalendar.ui.components.labels.UserAvatar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.components.layout.SectionTitle
 private enum class GroupDetailConfirmation { DELETE, LEAVE }
@@ -244,7 +244,7 @@ private fun MemberRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(name = username)
+        UserAvatar(user = member.user)
 
         Text(
             text = username,
@@ -276,11 +276,19 @@ private fun AddableFriendRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = friend.username,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            UserAvatar(user = friend)
+
+            Text(
+                text = friend.username,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
 
         TextButton(onClick = onAddClick, enabled = enabled) {
             Text("Add")

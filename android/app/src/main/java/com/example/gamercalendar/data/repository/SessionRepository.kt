@@ -27,6 +27,15 @@ class SessionRepository {
         return ApiClient.api.getSessions()
     }
 
+    suspend fun searchPublicSessions(query: String): List<GamingSession> {
+        return ApiClient.api.searchPublicSessions(query.trim().ifEmpty { null })
+    }
+
+    suspend fun joinSession(sessionId: String): GamingSession {
+        return ApiClient.api.joinSession(sessionId)
+    }
+
+
     suspend fun getSession(sessionId: String): GamingSession {
         return ApiClient.api.getSession(sessionId)
     }
