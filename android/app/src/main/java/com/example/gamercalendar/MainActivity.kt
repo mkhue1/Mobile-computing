@@ -1,7 +1,9 @@
 package com.example.gamercalendar
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -23,6 +25,8 @@ import com.example.gamercalendar.ui.navigation.AppNavigation
 import com.example.gamercalendar.ui.feature.auth.AuthScreen
 import com.example.gamercalendar.ui.theme.GamerCalendarTheme
 import com.example.gamercalendar.ui.feature.auth.AuthViewModel
+import com.example.gamercalendar.util.SteamLinkEvent
+import com.example.gamercalendar.util.SteamLinkEvents
 import com.google.android.libraries.places.api.Places
 
 class MainActivity : ComponentActivity() {
@@ -43,6 +47,8 @@ class MainActivity : ComponentActivity() {
                 1001
             )
         }
+
+        handleSteamDeepLink(intent)
 
         if (BuildConfig.GOOGLE_MAPS_API_KEY.isNotBlank() && !Places.isInitialized()) {
             Places.initializeWithNewPlacesApiEnabled(applicationContext, BuildConfig.GOOGLE_MAPS_API_KEY)
@@ -77,6 +83,24 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleSteamDeepLink(intent)
+    }
+
+    private fun handleSteamDeepLink(intent: Intent?) {
+        val data: Uri = intent?.data ?: return
+        if (data.scheme != "gamercalendar" || data.host != "steam") return
+
+        when (data.path?.trim('/')) {
+            "linked" -> SteamLinkEvents.emit(SteamLinkEvent.Success)
+            "error" -> SteamLinkEvents.emit(
+                SteamLinkEvent.Error(data.getQueryParameter("reason"))
+            )
         }
     }
 }

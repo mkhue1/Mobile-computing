@@ -10,7 +10,9 @@ data class FriendRequestResponse(
     val receiver_id: String,
     val created_at: String,
     val sender: User? = null,
-    val receiver: User? = null
+    val receiver: User? = null,
+    val steam_relation: String? = null,
+    val steam_persona_name: String? = null
 )
 
 data class FriendshipResponse(
