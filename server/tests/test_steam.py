@@ -1,11 +1,15 @@
+import asyncio
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import urlencode
+
+import pytest
 
 from app.helpers.friendship import ordered_friend_pair
 from app.models.friendship import FriendRequest, Friendship
 from app.models.user import User
 from app.security import create_steam_link_state
-from app.services.steam import SteamError
+from app.services.steam import SteamError, verify_openid_assertion
 
 
 STEAM_ID_A = "76561198000000001"
@@ -24,9 +28,19 @@ def _openid_params(steam_id: str, state: str) -> dict[str, str]:
         "openid.return_to": f"http://testserver/steam/callback?state={state}",
         "openid.response_nonce": "2026-01-01T00:00:00Z",
         "openid.assoc_handle": "test",
-        "openid.signed": "signed,claimed_id",
+        "openid.signed": "signed,claimed_id,return_to",
         "openid.sig": "test-sig",
     }
+
+
+def _steam_openid_valid():
+    response = MagicMock()
+    response.status_code = 200
+    response.text = "is_valid:true\n"
+    client = AsyncMock()
+    client.post.return_value = response
+    client.__aenter__.return_value = client
+    return patch("app.services.steam.httpx.AsyncClient", return_value=client)
 
 
 def test_steam_status_unlinked(client, make_user, auth_headers):
@@ -58,7 +72,7 @@ def test_steam_callback_links_account(client, make_user, db):
 
     with patch(
         "app.routers.steam.verify_openid_assertion",
-        new=AsyncMock(return_value=STEAM_ID_A),
+        new=AsyncMock(return_value=(STEAM_ID_A, state)),
     ):
         response = client.get(
             "/steam/callback",
@@ -85,7 +99,7 @@ def test_steam_callback_rejects_duplicate_steam_id(client, make_user, db):
 
     with patch(
         "app.routers.steam.verify_openid_assertion",
-        new=AsyncMock(return_value=STEAM_ID_A),
+        new=AsyncMock(return_value=(STEAM_ID_A, state)),
     ):
         response = client.get(
             "/steam/callback",
@@ -225,11 +239,92 @@ def test_user_response_includes_steam_linked(client, make_user, auth_headers, db
 
 
 def test_steam_callback_invalid_state(client):
+    with patch(
+        "app.routers.steam.verify_openid_assertion",
+        new=AsyncMock(return_value=(STEAM_ID_A, "not-a-jwt")),
+    ):
+        response = client.get(
+            "/steam/callback",
+            params={"openid.mode": "id_res"},
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 302
+    assert "invalid_state" in response.headers["location"]
+
+
+def test_steam_callback_uses_state_from_signed_return_to(client, make_user, db):
+    owner = make_user("owner")
+    victim = make_user("victim")
+    owner_state = create_steam_link_state(owner.id)
+    victim_state = create_steam_link_state(victim.id)
+    params = _openid_params(STEAM_ID_A, owner_state)
+    params["state"] = victim_state
+
+    with _steam_openid_valid():
+        response = client.get(
+            "/steam/callback",
+            params=params,
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "gamercalendar://steam/linked"
+    db.refresh(owner)
+    db.refresh(victim)
+    assert owner.steam_id == STEAM_ID_A
+    assert victim.steam_id is None
+
+
+def test_steam_callback_rejects_unsigned_return_to(client, make_user, db):
+    user = make_user("alice")
+    state = create_steam_link_state(user.id)
+    params = _openid_params(STEAM_ID_A, state)
+    params["openid.signed"] = "signed,op_endpoint"
+
     response = client.get(
         "/steam/callback",
-        params={"state": "not-a-jwt", "openid.mode": "id_res"},
+        params=params,
         follow_redirects=False,
     )
 
     assert response.status_code == 302
-    assert "invalid_state" in response.headers["location"]
+    assert "verification_failed" in response.headers["location"]
+    db.refresh(user)
+    assert user.steam_id is None
+
+
+def test_verify_openid_returns_state_from_signed_return_to():
+    state = "a b+c/d"
+    params = _openid_params(STEAM_ID_A, "ignored-query-state")
+    params["openid.return_to"] = (
+        "http://testserver/steam/callback?" + urlencode({"state": state})
+    )
+    params["state"] = "swapped-state"
+
+    with _steam_openid_valid():
+        steam_id, returned_state = asyncio.run(verify_openid_assertion(params))
+
+    assert steam_id == STEAM_ID_A
+    assert returned_state == state
+
+
+@pytest.mark.parametrize(
+    "signed",
+    ["signed,claimed_id", "signed,return_to", ""],
+)
+def test_verify_openid_requires_signed_return_to_and_claimed_id(signed):
+    params = _openid_params(STEAM_ID_A, "state-token")
+    params["openid.signed"] = signed
+
+    with pytest.raises(SteamError, match="must be signed"):
+        asyncio.run(verify_openid_assertion(params))
+
+
+def test_verify_openid_rejects_return_to_for_another_host():
+    params = _openid_params(STEAM_ID_A, "state-token")
+    params["openid.return_to"] = "https://evil.example/steam/callback?state=state-token"
+
+    with _steam_openid_valid():
+        with pytest.raises(SteamError, match="public base URL"):
+            asyncio.run(verify_openid_assertion(params))

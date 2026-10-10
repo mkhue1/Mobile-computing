@@ -15,7 +15,12 @@ from app.security import (
     decode_steam_link_state,
     get_current_user,
 )
-from app.services.steam import SteamError, build_openid_login_url, verify_openid_assertion
+from app.services.steam import (
+    STEAM_CALLBACK_PATH,
+    SteamError,
+    build_openid_login_url,
+    verify_openid_assertion,
+)
 
 router = APIRouter(
     prefix="/steam",
@@ -57,7 +62,7 @@ def start_steam_link(
 ):
     state = create_steam_link_state(current_user.id)
     base = _public_base_url()
-    return_to = f"{base}/steam/callback?{urlencode({'state': state})}"
+    return_to = f"{base}{STEAM_CALLBACK_PATH}?{urlencode({'state': state})}"
     auth_url = build_openid_login_url(return_to=return_to, realm=base)
     return SteamLinkResponse(auth_url=auth_url)
 
@@ -68,22 +73,19 @@ async def steam_callback(
     db: Session = Depends(get_db),
 ):
     params = {key: value for key, value in request.query_params.multi_items()}
-    state = params.get("state")
-    if not state:
-        return _error_redirect("missing_state")
-
-    try:
-        user_id = decode_steam_link_state(state)
-    except HTTPException:
-        return _error_redirect("invalid_state")
 
     if params.get("openid.mode") == "cancel":
         return _error_redirect("cancelled")
 
     try:
-        steam_id = await verify_openid_assertion(params)
+        steam_id, state = await verify_openid_assertion(params)
     except SteamError:
         return _error_redirect("verification_failed")
+
+    try:
+        user_id = decode_steam_link_state(state)
+    except HTTPException:
+        return _error_redirect("invalid_state")
 
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:

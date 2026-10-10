@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
 
@@ -15,6 +15,7 @@ STEAM_ID_SELECT = "http://specs.openid.net/auth/2.0/identifier_select"
 STEAM_CLAIMED_ID_RE = re.compile(
     r"^https://steamcommunity\.com/openid/id/(\d{17})$"
 )
+STEAM_CALLBACK_PATH = "/steam/callback"
 FRIEND_LIST_URL = "https://api.steampowered.com/ISteamUser/GetFriendList/v1/"
 PLAYER_SUMMARIES_URL = (
     "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
@@ -50,8 +51,42 @@ def parse_steam_id_from_claimed_id(claimed_id: str | None) -> str:
     return match.group(1)
 
 
-async def verify_openid_assertion(params: dict[str, str]) -> str:
-    """Validate an OpenID assertion with Steam and return the SteamID64."""
+def _signed_openid_fields(params: dict[str, str]) -> set[str]:
+    signed = params.get("openid.signed", "")
+    return {field.strip() for field in signed.split(",") if field.strip()}
+
+
+def _state_from_return_to(return_to: str | None) -> str:
+    """Return the link state from a return_to URL on the public callback."""
+    if not return_to:
+        raise SteamError("Missing OpenID return_to")
+
+    expected = urlsplit(settings.public_base_url.rstrip("/"))
+    actual = urlsplit(return_to.strip())
+    expected_path = f"{expected.path.rstrip('/')}{STEAM_CALLBACK_PATH}"
+    if (
+        actual.scheme.lower() != expected.scheme.lower()
+        or actual.netloc.lower() != expected.netloc.lower()
+        or actual.path.rstrip("/") != expected_path.rstrip("/")
+    ):
+        raise SteamError("OpenID return_to does not match the public base URL")
+
+    states = parse_qs(actual.query).get("state", [])
+    if len(states) != 1 or not states[0]:
+        raise SteamError("Missing state in OpenID return_to")
+    return states[0]
+
+
+async def verify_openid_assertion(params: dict[str, str]) -> tuple[str, str]:
+    """Validate a Steam OpenID assertion.
+
+    Returns (steam_id, state), validating that return_to and claimed_id are
+    signed in the process.
+    """
+    signed = _signed_openid_fields(params)
+    if "return_to" not in signed or "claimed_id" not in signed:
+        raise SteamError("OpenID return_to and claimed_id must be signed")
+
     check_params = {
         key: value
         for key, value in params.items()
@@ -70,7 +105,9 @@ async def verify_openid_assertion(params: dict[str, str]) -> str:
     if not valid:
         raise SteamError("Steam OpenID assertion is not valid")
 
-    return parse_steam_id_from_claimed_id(params.get("openid.claimed_id"))
+    steam_id = parse_steam_id_from_claimed_id(params.get("openid.claimed_id"))
+    state = _state_from_return_to(params.get("openid.return_to"))
+    return steam_id, state
 
 
 async def get_friend_steam_ids(steam_id: str) -> list[str]:
