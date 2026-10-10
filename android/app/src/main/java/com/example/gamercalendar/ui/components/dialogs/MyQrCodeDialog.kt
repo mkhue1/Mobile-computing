@@ -37,12 +37,16 @@ fun MyQrCodeDialog(
 
     fun saveQr() {
         try {
-            QrCode.saveToGallery(
+            val uri = QrCode.saveToGallery(
                 context = context,
                 bitmap = qrBitmap,
                 displayName = "roundtable_qr_${userId.take(8)}.png"
             )
-            Toast.makeText(context, "QR code saved", Toast.LENGTH_SHORT).show()
+            if (uri == null) {
+                Toast.makeText(context, "Couldn't save QR code", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "QR code saved", Toast.LENGTH_SHORT).show()
+            }
         } catch (e: Exception) {
             Toast.makeText(
                 context,
