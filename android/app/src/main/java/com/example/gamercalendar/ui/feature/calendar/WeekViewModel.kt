@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.gamercalendar.data.model.CalendarSession
+import com.example.gamercalendar.data.model.ExternalSession
 import com.kizitonwose.calendar.core.firstDayOfWeekFromLocale
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,13 +28,39 @@ private const val DEFAULT_START_HOUR = 8
 // (Overlaps can't be created any more, so this only covers older data.)
 private const val CASCADE_MIN_GAP_MINUTES = 45
 
-/** One day of the shown week, with its sessions already laid out as blocks. */
+/**
+ * One day of the shown week, with its sessions and timed phone events already laid out as blocks.
+ * All-day phone events have no place on the hour grid, so they are listed separately.
+ */
 internal data class WeekDayUi(
     val date: LocalDate,
     val isToday: Boolean,
     val isSelected: Boolean,
-    val blocks: List<PositionedSession>
+    val blocks: List<PositionedEntry>,
+    val allDayEvents: List<ExternalSession>
 )
+
+/** Something drawn in the week grid: one of the user's sessions or an event from the phone's calendar. */
+internal sealed interface WeekEntry {
+    val date: LocalDate // the day it starts
+    val lastDate: LocalDate // the last day it still has time on
+    val startTime: LocalTime
+    val endTime: LocalTime
+
+    data class Game(val session: CalendarSession) : WeekEntry {
+        override val date: LocalDate get() = session.date
+        override val lastDate: LocalDate get() = session.lastDate()
+        override val startTime: LocalTime get() = session.startTime
+        override val endTime: LocalTime get() = session.endTime
+    }
+
+    data class External(val event: ExternalSession) : WeekEntry {
+        override val date: LocalDate get() = event.date
+        override val lastDate: LocalDate get() = event.lastDate()
+        override val startTime: LocalTime get() = event.startTime
+        override val endTime: LocalTime get() = event.endTime
+    }
+}
 
 /** What the Week view shows: seven days and the hour the grid should open at. */
 internal data class WeekUiState(
@@ -46,23 +74,26 @@ internal data class WeekUiState(
  */
 internal class WeekViewModel(
     sessionsByDate: StateFlow<Map<LocalDate, List<CalendarSession>>>,
+    externalEvents: StateFlow<Map<LocalDate, List<ExternalSession>>>,
     private val selectedDate: StateFlow<LocalDate>
 ) : ViewModel() {
 
     private val firstDayOfWeek = firstDayOfWeekFromLocale()
     private val weekStart = MutableStateFlow(startOfWeek(selectedDate.value, firstDayOfWeek))
 
-    val uiState: StateFlow<WeekUiState> = combine(sessionsByDate, selectedDate, weekStart) { sessions, selected, start ->
-        buildWeek(start, selected, spreadAcrossDays(sessions))
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.Eagerly,
-        initialValue = buildWeek(
-            start = weekStart.value,
-            selected = selectedDate.value,
-            sessionsByDay = spreadAcrossDays(sessionsByDate.value)
+    val uiState: StateFlow<WeekUiState> =
+        combine(sessionsByDate, externalEvents, selectedDate, weekStart) { sessions, events, selected, start ->
+            buildWeek(start, selected, sessions, events)
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = buildWeek(
+                start = weekStart.value,
+                selected = selectedDate.value,
+                sessionsByDate = sessionsByDate.value,
+                eventsByDate = externalEvents.value
+            )
         )
-    )
 
     fun previousWeek() {
         weekStart.update { it.minusWeeks(1) }
@@ -86,22 +117,22 @@ internal class WeekViewModelFactory(
         require(modelClass.isAssignableFrom(WeekViewModel::class.java)) {
             "Unknown ViewModel class: ${modelClass.name}"
         }
-        return WeekViewModel(calendar.sessionsByDate, calendar.selectedDate) as T
+        return WeekViewModel(calendar.sessionsByDate, calendar.externalEvents, calendar.selectedDate) as T
     }
 }
 
-// Layout: where each session sits in the week grid.
+// Layout: where each session and phone event sits in the week grid.
 
 private data class Slot(
-    val session: CalendarSession,
+    val entry: WeekEntry,
     val startMinute: Int,
     val endMinute: Int,
     val continuesFromPrevious: Boolean,
     val continuesToNext: Boolean
 )
 
-internal data class PositionedSession(
-    val session: CalendarSession,
+internal data class PositionedEntry(
+    val entry: WeekEntry,
     val startMinute: Int,
     val endMinute: Int,
     val column: Int,
@@ -117,25 +148,31 @@ internal fun CalendarSession.lastDate(): LocalDate =
         .atZone(ZoneId.systemDefault())
         .toLocalDate()
 
-/** Puts every session on each day it covers, so one that crosses midnight shows on both days. */
-private fun spreadAcrossDays(
-    sessionsByDate: Map<LocalDate, List<CalendarSession>>
-): Map<LocalDate, List<CalendarSession>> {
-    val spread = mutableMapOf<LocalDate, MutableList<CalendarSession>>()
-    sessionsByDate.values.flatten().forEach { session ->
-        val last = session.lastDate()
-        var day = session.date
+/** The last calendar day on which the event still has time (ending exactly at midnight counts as the day before). */
+internal fun ExternalSession.lastDate(): LocalDate =
+    if (endTime == LocalTime.MIDNIGHT && endDate.isAfter(date)) endDate.minusDays(1) else maxOf(date, endDate)
+
+/** Puts every entry on each day it covers, so one that crosses midnight shows on both days. */
+private fun <T> spreadAcrossDays(
+    items: List<T>,
+    firstDate: (T) -> LocalDate,
+    lastDate: (T) -> LocalDate
+): Map<LocalDate, List<T>> {
+    val spread = mutableMapOf<LocalDate, MutableList<T>>()
+    items.forEach { item ->
+        val last = lastDate(item)
+        var day = firstDate(item)
         while (!day.isAfter(last)) {
-            spread.getOrPut(day) { mutableListOf() }.add(session)
+            spread.getOrPut(day) { mutableListOf() }.add(item)
             day = day.plusDays(1)
         }
     }
-    return spread.mapValues { (_, sessions) -> sessions.sortedBy { it.startEpochMillis } }
+    return spread
 }
 
-/** The part of a session that falls on [date]: from midnight if it started earlier, to midnight if it ends later. */
-private fun CalendarSession.toSlot(date: LocalDate): Slot {
-    val last = lastDate()
+/** The part of an entry that falls on [date]: from midnight if it started earlier, to midnight if it ends later. */
+private fun WeekEntry.toSlot(date: LocalDate): Slot {
+    val last = lastDate
     val start = if (date == this.date) startTime.hour * 60 + startTime.minute else 0
     val end = if (date == last) {
         (endTime.hour * 60 + endTime.minute).let { if (it == 0) MINUTES_PER_DAY else it }
@@ -143,7 +180,7 @@ private fun CalendarSession.toSlot(date: LocalDate): Slot {
         MINUTES_PER_DAY
     }
     return Slot(
-        session = this,
+        entry = this,
         startMinute = start,
         endMinute = end,
         continuesFromPrevious = date != this.date,
@@ -152,11 +189,11 @@ private fun CalendarSession.toSlot(date: LocalDate): Slot {
 }
 
 /**
- * Works out where each of one day's sessions sits horizontally. Sessions that overlap in time
+ * Works out where each of one day's entries sits horizontally. Entries that overlap in time
  * form a cluster and share the column's width; non-overlapping ones use the full width.
  */
-private fun layoutDay(date: LocalDate, sessions: List<CalendarSession>): List<PositionedSession> {
-    val slots = sessions
+private fun layoutDay(date: LocalDate, entries: List<WeekEntry>): List<PositionedEntry> {
+    val slots = entries
         .map { it.toSlot(date) }
         .sortedWith(compareBy({ it.startMinute }, { it.endMinute }))
 
@@ -174,8 +211,8 @@ private fun layoutDay(date: LocalDate, sessions: List<CalendarSession>): List<Po
     return clusters.flatMap { assignColumns(it) }
 }
 
-/** Gives each session in an overlapping cluster the first column that is free when it starts. */
-private fun assignColumns(cluster: List<Slot>): List<PositionedSession> {
+/** Gives each entry in an overlapping cluster the first column that is free when it starts. */
+private fun assignColumns(cluster: List<Slot>): List<PositionedEntry> {
     val cascade = cluster.size > 1 &&
             cluster.zipWithNext().all { (earlier, later) ->
                 later.startMinute - earlier.startMinute >= CASCADE_MIN_GAP_MINUTES
@@ -193,8 +230,8 @@ private fun assignColumns(cluster: List<Slot>): List<PositionedSession> {
         }
     }
     return cluster.mapIndexed { index, slot ->
-        PositionedSession(
-            session = slot.session,
+        PositionedEntry(
+            entry = slot.entry,
             startMinute = slot.startMinute,
             endMinute = slot.endMinute,
             column = columns[index],
@@ -212,8 +249,15 @@ private fun startOfWeek(date: LocalDate, firstDayOfWeek: DayOfWeek): LocalDate =
 private fun buildWeek(
     start: LocalDate,
     selected: LocalDate,
-    sessionsByDay: Map<LocalDate, List<CalendarSession>>
+    sessionsByDate: Map<LocalDate, List<CalendarSession>>,
+    eventsByDate: Map<LocalDate, List<ExternalSession>>
 ): WeekUiState {
+    val (allDayEvents, timedEvents) = eventsByDate.values.flatten().partition { it.isAllDay }
+    val entries = sessionsByDate.values.flatten().map { WeekEntry.Game(it) } +
+            timedEvents.map { WeekEntry.External(it) }
+    val entriesByDay = spreadAcrossDays(entries, { it.date }, { it.lastDate })
+    val allDayByDay = spreadAcrossDays(allDayEvents, { it.date }, { it.lastDate() })
+
     val today = LocalDate.now()
     val days = List(7) { offset ->
         val date = start.plusDays(offset.toLong())
@@ -221,7 +265,8 @@ private fun buildWeek(
             date = date,
             isToday = date == today,
             isSelected = date == selected,
-            blocks = layoutDay(date, sessionsByDay[date].orEmpty())
+            blocks = layoutDay(date, entriesByDay[date].orEmpty()),
+            allDayEvents = allDayByDay[date].orEmpty()
         )
     }
     return WeekUiState(days = days, initialScrollHour = initialScrollHour(days))

@@ -19,3 +19,27 @@ data class CalendarSession(
     val playerCount: Int,
     val playerLimit: Int?
 )
+
+/** An event from the phone's own calendars, with times converted to the phone's timezone. */
+data class ExternalSession(
+    val id: String,
+    val title: String,
+    val date: LocalDate,
+    val endDate: LocalDate,
+    val startTime: LocalTime,
+    val endTime: LocalTime,
+    val isAllDay: Boolean
+)
+
+/** One of the external calendars on the phone **/
+data class ExternalCalendar(
+    val id: Long,
+    val name: String,
+    val accountName: String,
+    val color: Int,
+    val ownerAccount: String?
+) {
+    // hide google public holiday calendars by default
+    val isHoliday: Boolean
+        get() = ownerAccount?.endsWith("#holiday@group.v.calendar.google.com") == true
+}

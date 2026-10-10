@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.gamercalendar.data.model.CalendarSession
+import com.example.gamercalendar.data.model.ExternalSession
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlinx.coroutines.flow.SharingStarted
@@ -15,12 +16,15 @@ import kotlinx.coroutines.flow.stateIn
 internal data class MonthUiState(
     val selectedDate: LocalDate,
     val sessionsByDate: Map<LocalDate, List<CalendarSession>>, // grouped by the day each session starts
-    val selectedDaySessions: List<CalendarSession>
+    val selectedDaySessions: List<CalendarSession>,
+    val eventsByDate: Map<LocalDate, List<ExternalSession>>, // phone calendar events, grouped the same way
+    val selectedDayEvents: List<ExternalSession>
 )
 
-/** Builds the Month view's state from the shared sessions and the selected day. */
+/** Builds the Month view's state from the shared sessions, the phone's events and the selected day. */
 internal class MonthViewModel(
     sessionsByDate: StateFlow<Map<LocalDate, List<CalendarSession>>>,
+    externalEvents: StateFlow<Map<LocalDate, List<ExternalSession>>>,
     private val selectedDate: StateFlow<LocalDate>
 ) : ViewModel() {
 
@@ -28,20 +32,25 @@ internal class MonthViewModel(
     val startMonth: YearMonth = YearMonth.now().minusMonths(MONTHS_EACH_WAY)
     val endMonth: YearMonth = YearMonth.now().plusMonths(MONTHS_EACH_WAY)
 
-    val uiState: StateFlow<MonthUiState> = combine(sessionsByDate, selectedDate) { sessions, selected ->
-        MonthUiState(
-            selectedDate = selected,
-            sessionsByDate = sessions,
-            selectedDaySessions = sessions[selected].orEmpty()
+    val uiState: StateFlow<MonthUiState> =
+        combine(sessionsByDate, externalEvents, selectedDate) { sessions, events, selected ->
+            buildState(sessions, events, selected)
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = buildState(sessionsByDate.value, externalEvents.value, selectedDate.value)
         )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.Eagerly,
-        initialValue = MonthUiState(
-            selectedDate = selectedDate.value,
-            sessionsByDate = sessionsByDate.value,
-            selectedDaySessions = sessionsByDate.value[selectedDate.value].orEmpty()
-        )
+
+    private fun buildState(
+        sessions: Map<LocalDate, List<CalendarSession>>,
+        events: Map<LocalDate, List<ExternalSession>>,
+        selected: LocalDate
+    ) = MonthUiState(
+        selectedDate = selected,
+        sessionsByDate = sessions,
+        selectedDaySessions = sessions[selected].orEmpty(),
+        eventsByDate = events,
+        selectedDayEvents = events[selected].orEmpty()
     )
 
     /** The month to open on: the selected day's month, kept inside the range the calendar covers. */
@@ -60,6 +69,6 @@ internal class MonthViewModelFactory(
         require(modelClass.isAssignableFrom(MonthViewModel::class.java)) {
             "Unknown ViewModel class: ${modelClass.name}"
         }
-        return MonthViewModel(calendar.sessionsByDate, calendar.selectedDate) as T
+        return MonthViewModel(calendar.sessionsByDate, calendar.externalEvents, calendar.selectedDate) as T
     }
 }
