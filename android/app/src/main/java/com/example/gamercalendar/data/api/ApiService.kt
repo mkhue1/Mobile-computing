@@ -40,6 +40,11 @@ interface ApiService {
         @Query("limit") limit: Int? = null
     ): List<User>
 
+    @GET("users/{userId}")
+    suspend fun getUser(
+        @Path("userId") userId: String
+    ): User
+
     @POST("users/")
     suspend fun createUser(
         @Body user: UserCreate
