@@ -9,6 +9,7 @@ import com.example.gamercalendar.data.model.SessionStatus
 import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.api.ApiService
 import com.example.gamercalendar.data.model.CalendarSession
+import com.example.gamercalendar.data.model.ExternalCalendar
 import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.model.GamingSession
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +21,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 
-// Projection array. Creating indices for this array instead of doing
+// Projection arrays. Creating indices for these arrays instead of doing
 // dynamic lookups improves performance.
 // see https://developer.android.com/identity/providers/calendar-provider :)
 private val EVENT_PROJECTION: Array<String> = arrayOf(
@@ -37,6 +38,21 @@ private const val PROJECTION_BEGIN_INDEX: Int = 1
 private const val PROJECTION_END_INDEX: Int = 2
 private const val PROJECTION_TITLE_INDEX: Int = 3
 private const val PROJECTION_ALL_DAY_INDEX: Int = 4
+
+private val CALENDAR_PROJECTION: Array<String> = arrayOf(
+    CalendarContract.Calendars._ID, // 0
+    CalendarContract.Calendars.CALENDAR_DISPLAY_NAME, // 1
+    CalendarContract.Calendars.ACCOUNT_NAME, // 2
+    CalendarContract.Calendars.CALENDAR_COLOR, // 3
+    CalendarContract.Calendars.OWNER_ACCOUNT // 4
+)
+
+// The indices for the calendar projection array above.
+private const val CALENDAR_ID_INDEX: Int = 0
+private const val CALENDAR_NAME_INDEX: Int = 1
+private const val CALENDAR_ACCOUNT_INDEX: Int = 2
+private const val CALENDAR_COLOR_INDEX: Int = 3
+private const val CALENDAR_OWNER_INDEX: Int = 4
 
 
 class CalendarRepository(private val api: ApiService, private val contentResolver: ContentResolver) {
@@ -84,7 +100,34 @@ class CalendarRepository(private val api: ApiService, private val contentResolve
         )
     }
 
-    suspend fun getExternalEvents(startMillis: Long, endMillis: Long): Map<LocalDate, List<ExternalSession>> {
+    /** Load details for all calendars on the phone **/
+    suspend fun getCalendars(): List<ExternalCalendar> {
+        return withContext(Dispatchers.IO) {
+            val uri = CalendarContract.Calendars.CONTENT_URI
+            val calendarList = mutableListOf<ExternalCalendar>()
+            contentResolver.query(uri, CALENDAR_PROJECTION, null, null, null)?.use { cur ->
+                while (cur.moveToNext()) {
+                    calendarList.add(
+                        ExternalCalendar(
+                            id = cur.getLong(CALENDAR_ID_INDEX),
+                            name = cur.getString(CALENDAR_NAME_INDEX) ?: "Unnamed calendar",
+                            accountName = cur.getString(CALENDAR_ACCOUNT_INDEX) ?: "",
+                            color = cur.getInt(CALENDAR_COLOR_INDEX),
+                            ownerAccount = cur.getString(CALENDAR_OWNER_INDEX)
+                        )
+                    )
+                }
+            }
+            calendarList.sortedWith(compareBy({ it.accountName }, { it.name }))
+        }
+    }
+
+    /** Loads the phone's events between the two times, leaving out excluded calendars. */
+    suspend fun getExternalEvents(
+        startMillis: Long,
+        endMillis: Long,
+        excludedCalendarIds: Set<Long> = emptySet()
+    ): Map<LocalDate, List<ExternalSession>> {
         return withContext(Dispatchers.IO) {
             // calendar instance search needs to provide start and end time for search and add it to URI path
             val builder: Uri.Builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
@@ -92,8 +135,15 @@ class CalendarRepository(private val api: ApiService, private val contentResolve
             ContentUris.appendId(builder, endMillis)
             val localZone = ZoneId.systemDefault()
             val eventList = mutableListOf<ExternalSession>()
+            // selection has one ? placeholder per hidden calendar
+            val selection = if (excludedCalendarIds.isEmpty()) {
+                null
+            } else {
+                "${CalendarContract.Instances.CALENDAR_ID} NOT IN (${excludedCalendarIds.joinToString { "?" }})"
+            }
+            val selectionArgs = excludedCalendarIds.map { it.toString() }.toTypedArray()
             // search for all instances, close cursor if error
-            contentResolver.query(builder.build(), EVENT_PROJECTION, null, null, null)?.use { cur ->
+            contentResolver.query(builder.build(), EVENT_PROJECTION, selection, selectionArgs, null)?.use { cur ->
                 while (cur.moveToNext()) {
                     // get key instance values
                     val eventID: Long = cur.getLong(PROJECTION_ID_INDEX)

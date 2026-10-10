@@ -14,7 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -51,10 +54,25 @@ fun CalendarScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val viewMode by viewModel.viewMode.collectAsState()
+    val calendars by viewModel.calendars.collectAsState()
+    val excludedCalendarIds by viewModel.excludedCalendarIds.collectAsState()
+    var showCalendarPicker by remember { mutableStateOf(false) }
 
     // The calendar leaves composition while a session's details are open, so this runs again
     // each time the user comes back and picks up any edits, cancellations or leaves.
     LaunchedEffect(Unit) { viewModel.refresh() }
+
+    if (showCalendarPicker) {
+        CalendarPickerDialog(
+            calendars = calendars,
+            excludedCalendarIds = excludedCalendarIds,
+            onConfirm = { excluded ->
+                viewModel.setExcludedCalendars(excluded)
+                showCalendarPicker = false
+            },
+            onDismiss = { showCalendarPicker = false }
+        )
+    }
 
     Column(
         modifier = modifier
@@ -67,7 +85,11 @@ fun CalendarScreen(
     ) {
         ViewModeSelector(
             selected = viewMode,
-            onSelect = viewModel::setViewMode
+            onSelect = viewModel::setViewMode,
+            onChooseCalendars = {
+                viewModel.loadCalendars() // pick up calendars added since the list was last read
+                showCalendarPicker = true
+            }
         )
         Spacer(Modifier.height(12.dp))
 
@@ -121,17 +143,26 @@ private fun WeekTab(
 @Composable
 private fun ViewModeSelector(
     selected: CalendarViewMode,
-    onSelect: (CalendarViewMode) -> Unit
+    onSelect: (CalendarViewMode) -> Unit,
+    onChooseCalendars: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         CalendarViewMode.entries.forEach { mode ->
             FilterChip(
                 selected = mode == selected,
                 onClick = { onSelect(mode) },
                 label = { Text(mode.label) }
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = onChooseCalendars) {
+            Icon(
+                imageVector = Icons.Default.FilterList,
+                contentDescription = "Choose calendars to show"
             )
         }
     }

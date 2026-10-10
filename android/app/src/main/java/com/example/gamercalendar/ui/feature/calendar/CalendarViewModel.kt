@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.gamercalendar.data.api.ApiClient
 import com.example.gamercalendar.data.api.ApiService
 import com.example.gamercalendar.data.model.CalendarSession
+import com.example.gamercalendar.data.model.ExternalCalendar
 import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.repository.CalendarRepository
 import java.io.IOException
@@ -55,6 +56,16 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
      * grouped by the day each one starts. **/
     val externalEvents: StateFlow<Map<LocalDate, List<ExternalSession>>> = _externalEvents.asStateFlow()
 
+    private val _calendars = MutableStateFlow<List<ExternalCalendar>>(emptyList())
+
+    /** The calendars on the phone, for the calendar picker. */
+    val calendars: StateFlow<List<ExternalCalendar>> = _calendars.asStateFlow()
+
+    private val _excludedCalendarIds = MutableStateFlow<Set<Long>>(emptySet())
+
+    /** Calendars the user has unticked in the picker (does not want to display) */
+    val excludedCalendarIds: StateFlow<Set<Long>> = _excludedCalendarIds.asStateFlow()
+
     private val _viewMode = MutableStateFlow(CalendarViewMode.MONTH) // month is the default
     val viewMode: StateFlow<CalendarViewMode> = _viewMode.asStateFlow()
 
@@ -62,7 +73,9 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
 
     private var loadedAround: YearMonth? = null
+    private var requestedMonth: YearMonth? = null // the month the visible view last asked for
     private var eventJob: Job? = null
+    private var calendarsLoaded = false
 
     fun setViewMode(mode: CalendarViewMode) {
         _viewMode.value = mode
@@ -115,6 +128,7 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
 
     /** Loads the phone's calendar events for a given month and the months either side of it. **/
     fun loadEventsAround(month: YearMonth) {
+        requestedMonth = month
         // don't load data again if it's the currently loaded set
         if (month == loadedAround) {
             return
@@ -130,7 +144,9 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
         eventJob?.cancel()
         eventJob = viewModelScope.launch {
             try {
-                _externalEvents.value = repository.getExternalEvents(startMillis, endMillis)
+                ensureCalendarsLoaded()
+                _externalEvents.value =
+                    repository.getExternalEvents(startMillis, endMillis, _excludedCalendarIds.value)
             } catch (e: CancellationException) {
                 throw e // never swallow coroutine cancellation
             } catch (e: SecurityException) {
@@ -144,6 +160,40 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
                 loadedAround = null
             }
         }
+    }
+
+    /**
+     * The first time ran, reads the phone's calendars and hides holidays
+     * so holidays don't appear and then disappear.
+     */
+    private suspend fun ensureCalendarsLoaded() {
+        if (calendarsLoaded) return
+        val calendars = repository.getCalendars()
+        _calendars.value = calendars
+        _excludedCalendarIds.value = calendars.filter { it.isHoliday }.map { it.id }.toSet()
+        calendarsLoaded = true
+    }
+
+    /** :oads/reloads the phone's calendars */
+    fun loadCalendars() {
+        viewModelScope.launch {
+            try {
+                _calendars.value = repository.getCalendars()
+            } catch (e: CancellationException) {
+                throw e // never swallow coroutine cancellation
+            } catch (e: SecurityException) {
+                _calendars.value = emptyList() // calendar permission not granted
+            }
+        }
+    }
+
+    /** Applies the picker's choice and reloads events for the block around the current month on screen. */
+    fun setExcludedCalendars(ids: Set<Long>) {
+        if (ids == _excludedCalendarIds.value) return
+        _excludedCalendarIds.value = ids
+        calendarsLoaded = true
+        loadedAround = null
+        requestedMonth?.let { loadEventsAround(it) }
     }
 }
 
