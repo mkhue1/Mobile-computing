@@ -297,6 +297,22 @@ class ManageSessionViewModel(
         }
     }
 
+    fun joinSession() {
+        val sessionId = uiState.value.session?.id ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWorking = true, actionError = null) }
+            try {
+                sessionRepository.joinSession(sessionId)
+                _uiState.update { it.copy(message = "You joined the session") }
+                load() // reloads the session so it now shows you as a player with a Leave button
+            } catch (e: Exception) {
+                // use the same error handling as leaveSession() so the server's message shows,
+                // e.g. "Session is full" or "Sessions can't overlap"
+                _uiState.update { it.copy(isWorking = false, actionError = e.message) }
+            }
+        }
+    }
+
     fun leaveSession() {
         viewModelScope.launch {
             _uiState.update { it.copy(isWorking = true, actionError = null) }

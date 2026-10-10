@@ -21,6 +21,12 @@ class CalendarRepository(private val api: ApiService) {
             .sortedWith(compareBy({ it.date }, { it.startTime }))
     }
 
+    suspend fun searchPublicSessions(query: String): List<CalendarSession> {
+        val zone = ZoneId.systemDefault()
+        return api.searchPublicSessions(query.trim().ifEmpty { null })
+            .map { it.toCalendarSession(zone) }
+    }
+
     /**
      * The server stores times in UTC. Converting to the phone's timezone here means a late-night
      * session lands on the calendar day the user actually experiences.

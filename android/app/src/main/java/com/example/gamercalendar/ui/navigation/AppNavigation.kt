@@ -20,6 +20,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.ui.feature.calendar.CalendarScreen
 import com.example.gamercalendar.ui.feature.calendar.CalendarViewModel
 import com.example.gamercalendar.ui.feature.calendar.CalendarViewModelFactory
+import com.example.gamercalendar.ui.feature.search.SearchScreen
+import com.example.gamercalendar.ui.feature.search.SearchViewModel
+import com.example.gamercalendar.ui.feature.search.SearchViewModelFactory
 import com.example.gamercalendar.ui.components.app.AppBottomBar
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.app.AppTopBar
@@ -177,8 +180,10 @@ fun AppNavigation(
             }
 
             composable(Routes.ITEM_5) {
-                PlaceholderScreen(
-                    text = "Item 5"
+                val searchViewModel: SearchViewModel = viewModel(factory = SearchViewModelFactory())
+                SearchScreen(
+                    viewModel = searchViewModel,
+                    onSessionClick = { sessionId -> navController.navigate(Routes.manageSession(sessionId)) }
                 )
             }
 
