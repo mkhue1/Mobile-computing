@@ -130,6 +130,16 @@ interface ApiService {
     @GET("sessions/")
     suspend fun getSessions(): List<GamingSession>
 
+    @GET("sessions/public")
+    suspend fun searchPublicSessions(
+        @Query("q") query: String? = null
+    ): List<GamingSession>
+
+    @POST("sessions/{sessionId}/join")
+    suspend fun joinSession(
+        @Path("sessionId") sessionId: String
+    ): GamingSession
+
     @GET("sessions/{sessionId}")
     suspend fun getSession(
         @Path("sessionId") sessionId: String
