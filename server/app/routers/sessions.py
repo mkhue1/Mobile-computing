@@ -1,15 +1,16 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, select, func, update
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.helpers.session import can_view_session
-from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionVisibility, InviteStatus
+from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant, SessionStatus, SessionType, SessionVisibility, InviteStatus
 from app.models.user import User
+from app.models.game import Game
 from app.models.user_group import UserGroup, UserGroupMember
-from app.schemas.session import InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, ParticipantResponse, SentInviteResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
+from app.schemas.session import LOCATION_FIELDS, InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, ParticipantResponse, SentInviteResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
 from app.schemas.user import UserResponse
 from app.security import get_current_user
 
@@ -36,6 +37,14 @@ def _require_group_membership(db: Session, group_id: UUID, user_id: UUID) -> Non
         )
 
 
+def _require_in_person_location(session_type: SessionType, location_name: str | None) -> None:
+    if session_type == SessionType.IN_PERSON and not (location_name and location_name.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An in-person session needs a location",
+        )
+
+
 @router.get(
     "/",
     response_model=list[SessionResponse],
@@ -55,6 +64,96 @@ def get_sessions(
     )
 
     return db.scalars(statement).all()
+
+@router.get(
+    "/public",
+    response_model=list[SessionResponse],
+)
+def search_public_sessions(
+    q: str | None = Query(
+        default=None,
+        max_length=100,
+        description="Matches against the game name or the session title",
+    ),
+    limit: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Sessions the user is already in are left out, since there is nothing left to join.
+    already_in = select(SessionParticipant.session_id).where(
+        SessionParticipant.user_id == current_user.id
+    )
+
+    statement = (
+        select(GamingSession)
+        .join(Game, Game.id == GamingSession.game_id)
+        .where(
+            # Only public, open sessions that haven't finished are ever returned, so private,
+            # friends and group sessions can't leak through search.
+            GamingSession.visibility == SessionVisibility.PUBLIC,
+            GamingSession.status == SessionStatus.OPEN,
+            GamingSession.end_at > func.now(),
+            GamingSession.id.not_in(already_in),
+        )
+        .order_by(GamingSession.start_at)
+        .limit(limit)
+    )
+
+    term = (q or "").strip()
+    if term:
+        # autoescape stops a typed % or _ from acting as a wildcard.
+        statement = statement.where(
+            or_(
+                Game.name.icontains(term, autoescape=True),
+                GamingSession.title.icontains(term, autoescape=True),
+            )
+        )
+
+    return db.scalars(statement).all()
+
+
+@router.post(
+    "/{session_id}/join",
+    response_model=SessionResponse,
+)
+def join_public_session(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Locked so two people taking the last place at the same moment can't both get it.
+    session = db.scalars(
+        select(GamingSession).where(GamingSession.id == session_id).with_for_update()
+    ).one_or_none()
+
+    # 404 rather than 403 so a private session isn't revealed to exist.
+    if session is None or session.visibility != SessionVisibility.PUBLIC:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Session {session_id} does not exist")
+    if session.status != SessionStatus.OPEN:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is {session.status.value} and can't be joined")
+    if db.get(SessionParticipant, (session_id, current_user.id)) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="You're already in this session")
+    if session.player_limit is not None and session.player_count >= session.player_limit:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is full")
+
+
+    db.add(SessionParticipant(session_id=session_id, user_id=current_user.id))
+    session.player_count += 1
+
+    # If the user had been invited as well, that invite is now settled.
+    db.execute(
+        update(SessionInvite)
+        .where(
+            SessionInvite.session_id == session_id,
+            SessionInvite.receiver_id == current_user.id,
+            SessionInvite.status == InviteStatus.PENDING,
+        )
+        .values(status=InviteStatus.ACCEPTED, responded_at=func.now())
+    )
+
+    db.commit()
+    db.refresh(session)
+    return session
 
 
 @router.post(
@@ -77,6 +176,8 @@ def create_session(
     if session.group_id is not None:
         _require_group_membership(db, session.group_id, current_user.id)
 
+    _require_in_person_location(session.session_type, session.location_name)
+
     new_session = GamingSession(
         organiser_id=current_user.id,
         game_id=session.game_id,
@@ -89,6 +190,10 @@ def create_session(
         visibility=session.visibility,
         status=SessionStatus.OPEN,
         location_name=session.location_name,
+        location_address=session.location_address,
+        location_place_id=session.location_place_id,
+        location_lat=session.location_lat,
+        location_lng=session.location_lng,
         player_count=1,
         player_limit=session.player_limit,
     )
@@ -517,6 +622,16 @@ def update_session(
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is {session.status.value} and can't be edited")
 
     updates = changes.model_dump(exclude_unset=True)
+
+    # Stops a new location name keeping the previous place's address and coordinates.
+    if updates.keys() & set(LOCATION_FIELDS):
+        for field in LOCATION_FIELDS:
+            updates.setdefault(field, None)
+
+    _require_in_person_location(
+        updates.get("session_type", session.session_type),
+        updates.get("location_name", session.location_name),
+    )
 
     start_at = updates.get("start_at", session.start_at)
     end_at = updates.get("end_at", session.end_at)

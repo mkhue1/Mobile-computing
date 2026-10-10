@@ -41,7 +41,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.SessionType
+import com.example.gamercalendar.data.model.SessionVisibility
 import com.example.gamercalendar.data.model.User
+import com.example.gamercalendar.data.model.place
 import com.example.gamercalendar.ui.components.buttons.DefaultButton
 import com.example.gamercalendar.ui.components.buttons.DestructiveButton
 import com.example.gamercalendar.ui.components.buttons.SecondaryButton
@@ -52,7 +54,7 @@ import com.example.gamercalendar.ui.components.dialogs.ConfirmDialog
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
-import com.example.gamercalendar.ui.components.labels.Avatar
+import com.example.gamercalendar.ui.components.labels.UserAvatar
 import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.components.layout.SectionTitle
@@ -131,7 +133,7 @@ fun ManageSessionScreen(
                     ?.takeIf { session.session_type == SessionType.IN_PERSON }
                     ?.let { location ->
                         SectionTitle(title = "Location")
-                        LocationCard(location = location)
+                        LocationCard(name = location, place = session.place)
                     }
 
                 session.description?.let { notes ->
@@ -238,6 +240,22 @@ fun ManageSessionScreen(
                             onClick = { pendingConfirmation = PendingConfirmation.LEAVE },
                             enabled = !uiState.isWorking
                         )
+                    }
+                     else if (session.visibility == SessionVisibility.PUBLIC) {
+                        val isFull = session.player_limit?.let { session.player_count >= it } == true
+                        if (isFull) {
+                            Text(
+                                text = "This session is full.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            DefaultButton(
+                                text = "Join session",
+                                onClick = viewModel::joinSession,
+                                enabled = !uiState.isWorking
+                            )
+                        }
                     }
                 }
             }
@@ -364,7 +382,7 @@ private fun PlayerRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(name = user.username)
+        UserAvatar(user = user)
 
         Text(
             text = user.username,
@@ -404,7 +422,7 @@ private fun InvitedRow(user: User) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(name = user.username)
+        UserAvatar(user = user)
 
         Text(
             text = user.username,
@@ -482,7 +500,7 @@ private fun InviteFriendsSheet(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Avatar(name = friend.username)
+                                UserAvatar(user = friend)
                                 Text(
                                     text = friend.username,
                                     style = MaterialTheme.typography.bodyLarge,

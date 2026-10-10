@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -37,7 +38,7 @@ val bottomNavItems = listOf(
     ),
     BottomNavItem(
         route = Routes.ITEM_5,
-        label = "Item 5",
-        icon = Icons.Default.Star
+        label = "Search",
+        icon = Icons.Default.Search
     )
 )

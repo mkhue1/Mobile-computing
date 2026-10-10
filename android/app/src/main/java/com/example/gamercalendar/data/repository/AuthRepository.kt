@@ -5,6 +5,7 @@ import com.example.gamercalendar.data.model.LoginRequest
 import com.example.gamercalendar.data.model.TokenResponse
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserCreate
+import com.example.gamercalendar.data.session.CurrentUserStore
 import com.example.gamercalendar.data.session.SessionManager
 
 class AuthRepository(
@@ -34,6 +35,7 @@ class AuthRepository(
             username = response.user.username,
             email = response.user.email
         )
+        CurrentUserStore.set(response.user)
         return response
     }
 
@@ -43,5 +45,6 @@ class AuthRepository(
 
     suspend fun logout() {
         sessionManager.clearSession()
+        CurrentUserStore.clear()
     }
 }

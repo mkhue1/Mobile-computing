@@ -24,11 +24,15 @@ import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserCreate
 import com.example.gamercalendar.data.model.UserGroup
 import com.example.gamercalendar.data.model.GameSearchResult
+import okhttp3.MultipartBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -52,6 +56,15 @@ interface ApiService {
 
     @GET("auth/me")
     suspend fun me(): User
+
+    @Multipart
+    @PUT("users/me/avatar")
+    suspend fun uploadAvatar(
+        @Part file: MultipartBody.Part
+    ): User
+
+    @DELETE("users/me/avatar")
+    suspend fun deleteAvatar()
 
     @GET("friends/")
     suspend fun getFriends(): List<User>
@@ -129,6 +142,16 @@ interface ApiService {
 
     @GET("sessions/")
     suspend fun getSessions(): List<GamingSession>
+
+    @GET("sessions/public")
+    suspend fun searchPublicSessions(
+        @Query("q") query: String? = null
+    ): List<GamingSession>
+
+    @POST("sessions/{sessionId}/join")
+    suspend fun joinSession(
+        @Path("sessionId") sessionId: String
+    ): GamingSession
 
     @GET("sessions/{sessionId}")
     suspend fun getSession(

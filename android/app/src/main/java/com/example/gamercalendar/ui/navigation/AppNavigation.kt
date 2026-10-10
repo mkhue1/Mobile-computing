@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.animation.fadeIn
@@ -15,12 +16,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.gamercalendar.data.repository.UserRepository
+import com.example.gamercalendar.data.session.CurrentUserStore
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.ui.feature.calendar.CalendarScreen
 import com.example.gamercalendar.ui.feature.calendar.CalendarViewModel
 import com.example.gamercalendar.ui.feature.calendar.CalendarViewModelFactory
+import com.example.gamercalendar.ui.feature.search.SearchScreen
+import com.example.gamercalendar.ui.feature.search.SearchViewModel
+import com.example.gamercalendar.ui.feature.search.SearchViewModelFactory
 import com.example.gamercalendar.ui.components.app.AppBottomBar
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.app.AppTopBar
@@ -33,6 +40,7 @@ import com.example.gamercalendar.ui.feature.home.HomeScreen
 import com.example.gamercalendar.ui.feature.profile.UsersScreen
 import com.example.gamercalendar.ui.feature.sessions.CreateSessionScreen
 import com.example.gamercalendar.ui.feature.sessions.ManageSessionScreen
+import kotlinx.coroutines.CancellationException
 
 
 @Composable
@@ -44,9 +52,23 @@ fun AppNavigation(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    val currentUser by CurrentUserStore.user.collectAsStateWithLifecycle()
+
+    // A cold start with a stored token skips login, so fetch the user here to fill CurrentUserStore.
+    LaunchedEffect(Unit) {
+        try {
+            UserRepository().getCurrentUser()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Keep the default profile icon; screens surface their own errors.
+        }
+    }
+
     AppScaffold(
         topBar = {
             AppTopBar(
+                user = currentUser,
                 onProfileClick = {
                     navController.navigate(Routes.USERS) {
                         launchSingleTop = true
@@ -67,12 +89,18 @@ fun AppNavigation(
                     // bring back screens stacked on top of them, such as Create session or Add friend.
                     val resetsToRoot = route == Routes.ITEM_1 || route == Routes.FRIENDS_HUB
 
-                    navController.navigate(route) {
-                        launchSingleTop = true
-                        restoreState = !resetsToRoot
+                    // If this tab is already underneath the current screen (for example Calendar underneath
+                    // Manage session), go back to it. Its state, such as the selected day, is kept.
+                    val returnedToTab = !resetsToRoot && navController.popBackStack(route, inclusive = false)
 
-                        popUpTo(Routes.ITEM_1) {
-                            saveState = !resetsToRoot
+                    if (!returnedToTab) {
+                        navController.navigate(route) {
+                            launchSingleTop = true
+                            restoreState = !resetsToRoot
+
+                            popUpTo(Routes.ITEM_1) {
+                                saveState = !resetsToRoot
+                            }
                         }
                     }
                 }
@@ -151,8 +179,14 @@ fun AppNavigation(
             }
 
             composable(Routes.ITEM_2) {
-                val calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory(contentResolver = LocalContext.current.applicationContext.contentResolver))
-                CalendarScreen(viewModel = calendarViewModel)
+                val calendarViewModel: CalendarViewModel = viewModel(
+                    factory = CalendarViewModelFactory(contentResolver = LocalContext.current.applicationContext.contentResolver)
+                )
+                CalendarScreen(
+                    viewModel = calendarViewModel,
+                    onSessionClick = { sessionId -> navController.navigate(Routes.manageSession(sessionId))
+                    }
+                )
             }
 
             composable(Routes.USERS) {
@@ -168,8 +202,12 @@ fun AppNavigation(
             }
 
             composable(Routes.ITEM_5) {
-                PlaceholderScreen(
-                    text = "Item 5"
+                val searchViewModel: SearchViewModel = viewModel(
+                    factory = SearchViewModelFactory(contentResolver = LocalContext.current.applicationContext.contentResolver)
+                )
+                SearchScreen(
+                    viewModel = searchViewModel,
+                    onSessionClick = { sessionId -> navController.navigate(Routes.manageSession(sessionId)) }
                 )
             }
 

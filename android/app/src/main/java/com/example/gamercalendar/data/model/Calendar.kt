@@ -9,6 +9,9 @@ data class CalendarSession(
     val title: String,
     val gameName: String,
     val date: LocalDate,
+    val session: GamingSession,
+    val startEpochMillis: Long,
+    val endEpochMillis: Long,
     val startTime: LocalTime,
     val endTime: LocalTime,
     val isOnline: Boolean,
@@ -17,10 +20,13 @@ data class CalendarSession(
     val playerLimit: Int?
 )
 
+/** An event from the phone's own calendar, with times converted to the phone's timezone. */
 data class ExternalSession(
     val id: String,
     val title: String,
     val date: LocalDate,
+    val endDate: LocalDate,
     val startTime: LocalTime,
     val endTime: LocalTime,
+    val isAllDay: Boolean
 )

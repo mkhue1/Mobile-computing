@@ -1,16 +1,21 @@
 package com.example.gamercalendar.ui.feature.sessions
 
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gamercalendar.data.model.Game
 import com.example.gamercalendar.data.model.GamingSession
 import com.example.gamercalendar.data.model.SessionCreate
+import com.example.gamercalendar.data.model.SessionPlace
 import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.model.SessionVisibility
 import com.example.gamercalendar.data.model.UserGroup
 import com.example.gamercalendar.data.model.GameSearchResult
+import com.example.gamercalendar.data.model.place
 import com.example.gamercalendar.data.repository.GroupRepository
+import com.example.gamercalendar.data.repository.PlaceRepository
+import com.example.gamercalendar.data.repository.PlaceSuggestion
 import com.example.gamercalendar.data.repository.SessionRepository
 import com.example.gamercalendar.ui.navigation.Routes
 import com.example.gamercalendar.util.SessionTime
@@ -26,6 +31,7 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 private const val GAME_SEARCH_DEBOUNCE_MS = 250L
+private const val PLACE_SEARCH_DEBOUNCE_MS = 250L
 
 data class CreateSessionForm(
     val gameId: String? = null,
@@ -40,7 +46,9 @@ data class CreateSessionForm(
     val endMinute: Int,
     val sessionType: SessionType = SessionType.ONLINE,
     val visibility: SessionVisibility = SessionVisibility.PRIVATE,
-    val locationName: String = "",
+    /** What's typed in the location field. Saved as a plain name if no place is picked. */
+    val locationQuery: String = "",
+    val place: SessionPlace? = null,
     val playerLimit: String = ""
 ) {
     /** An end time at or before the start time is treated as running past midnight. */
@@ -86,6 +94,11 @@ data class CreateSessionUiState(
     val gameResults: List<GameSearchResult> = emptyList(),
     val isSearchingGames: Boolean = false,
     val gameSearchError: String? = null,
+    val canSearchPlaces: Boolean = false,
+    val placeResults: List<PlaceSuggestion> = emptyList(),
+    val isSearchingPlaces: Boolean = false,
+    val isLoadingPlace: Boolean = false,
+    val placeSearchError: String? = null,
     val groups: List<UserGroup> = emptyList(),
     val isLoadingGroups: Boolean = false,
     val groupsError: String? = null,
@@ -111,20 +124,26 @@ data class CreateSessionUiState(
 }
 
 class CreateSessionViewModel(
+    application: Application,
     savedStateHandle: SavedStateHandle
-) : ViewModel() {
+) : AndroidViewModel(application) {
 
     /** Set when editing an existing session; null when creating a new one. */
     private val sessionId: String? = savedStateHandle[Routes.ARG_SESSION_ID]
 
     private val repository = SessionRepository()
     private val groupRepository = GroupRepository()
+    private val placeRepository = PlaceRepository.createOrNull(application)
 
-    private val _uiState = MutableStateFlow(CreateSessionUiState(isEditing = sessionId != null))
+    private val _uiState = MutableStateFlow(
+        CreateSessionUiState(isEditing = sessionId != null, canSearchPlaces = placeRepository != null)
+    )
     val uiState: StateFlow<CreateSessionUiState> = _uiState.asStateFlow()
 
     private var gameSearchJob: Job? = null
     private var gameSelectJob: Job? = null
+    private var placeSearchJob: Job? = null
+    private var placeSelectJob: Job? = null
 
     init {
         loadGroups()
@@ -162,7 +181,8 @@ class CreateSessionViewModel(
                     endMinute = endLocal.get(Calendar.MINUTE),
                     sessionType = session.session_type,
                     visibility = session.visibility,
-                    locationName = session.location_name.orEmpty(),
+                    locationQuery = session.location_name.orEmpty(),
+                    place = session.place,
                     playerLimit = session.player_limit?.toString().orEmpty()
                 )
 
@@ -252,6 +272,66 @@ class CreateSessionViewModel(
         }
     }
 
+    fun onLocationQueryChange(query: String) {
+        updateForm { it.copy(locationQuery = query, place = null) }
+        placeSearchJob?.cancel()
+        placeSelectJob?.cancel()
+        _uiState.update { it.copy(isLoadingPlace = false) }
+
+        val places = placeRepository ?: return
+        if (query.isBlank()) {
+            _uiState.update {
+                it.copy(placeResults = emptyList(), isSearchingPlaces = false, placeSearchError = null)
+            }
+            return
+        }
+
+        _uiState.update { it.copy(isSearchingPlaces = true, placeSearchError = null) }
+        placeSearchJob = viewModelScope.launch {
+            delay(PLACE_SEARCH_DEBOUNCE_MS)
+            try {
+                val results = places.search(query.trim())
+                _uiState.update { it.copy(placeResults = results, isSearchingPlaces = false) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isSearchingPlaces = false,
+                        placeSearchError = e.message ?: "Couldn't search locations"
+                    )
+                }
+            }
+        }
+    }
+
+    fun selectPlace(suggestion: PlaceSuggestion) {
+        val places = placeRepository ?: return
+        placeSearchJob?.cancel()
+        placeSelectJob?.cancel()
+        updateForm { it.copy(locationQuery = suggestion.primaryText, place = null) }
+        _uiState.update {
+            it.copy(isSearchingPlaces = false, placeResults = emptyList(), isLoadingPlace = true)
+        }
+
+        placeSelectJob = viewModelScope.launch {
+            try {
+                val place = places.getPlace(suggestion.placeId)
+                updateForm { it.copy(locationQuery = place.name, place = place) }
+                _uiState.update { it.copy(isLoadingPlace = false) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingPlace = false,
+                        placeSearchError = e.message ?: "Couldn't load that location"
+                    )
+                }
+            }
+        }
+    }
+
     fun updateForm(transform: (CreateSessionForm) -> CreateSessionForm) {
         _uiState.update { it.copy(form = transform(it.form), error = null) }
     }
@@ -264,6 +344,10 @@ class CreateSessionViewModel(
             return
         }
 
+        val isInPerson = form.sessionType == SessionType.IN_PERSON
+        val place = form.place.takeIf { isInPerson }
+        val typedLocation = form.locationQuery.trim().takeIf { isInPerson && it.isNotBlank() }
+
         val request = SessionCreate(
             game_id = form.gameId!!,
             group_id = form.groupId.takeIf { form.visibility == SessionVisibility.GROUP },
@@ -273,8 +357,11 @@ class CreateSessionViewModel(
             end_at = SessionTime.toIsoUtc(form.endEpochMillis),
             session_type = form.sessionType,
             visibility = form.visibility,
-            location_name = form.locationName.trim()
-                .takeIf { form.sessionType == SessionType.IN_PERSON && it.isNotBlank() },
+            location_name = place?.name ?: typedLocation,
+            location_address = place?.address,
+            location_place_id = place?.placeId,
+            location_lat = place?.lat,
+            location_lng = place?.lng,
             player_limit = form.playerLimit.toIntOrNull()
         )
 
@@ -308,8 +395,13 @@ class CreateSessionViewModel(
         if (startChanged && form.startEpochMillis <= System.currentTimeMillis()) {
             return "Start time must be in the future"
         }
-        if (form.sessionType == SessionType.IN_PERSON && form.locationName.isBlank()) {
-            return "Enter a location for an in-person session"
+        if (form.sessionType == SessionType.IN_PERSON) {
+            if (form.locationQuery.isBlank()) {
+                return "Enter a location for an in-person session"
+            }
+            if (_uiState.value.isLoadingPlace) {
+                return "Still loading the location, try again in a moment"
+            }
         }
         if (form.visibility == SessionVisibility.GROUP && form.groupId == null) {
             return "Choose a group"
