@@ -46,6 +46,7 @@ class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
     username: str
+    steam_linked: bool = False
     # null means no profile picture; the image itself is served by GET /users/{id}/avatar
     avatar_updated_at: datetime | None = None
 

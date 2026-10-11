@@ -46,6 +46,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 @Composable
 fun AddFriendScreen(
     onDone: () -> Unit,
+    onOpenProfile: () -> Unit = {},
     viewModel: AddFriendViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -108,6 +109,43 @@ fun AddFriendScreen(
             color = MaterialTheme.colorScheme.onBackground
         )
 
+        Text(
+            text = "Suggested from Steam",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        when {
+            uiState.isLoading -> LoadingIndicator()
+            !uiState.steamLinked -> {
+                EmptyState(
+                    title = "Connect Steam to get suggestions",
+                    message = "Link your Steam account from your profile to see friends already on Roundtable."
+                )
+                TextButton(onClick = onOpenProfile) {
+                    Text("Open profile")
+                }
+            }
+            uiState.isLoadingSteamSuggestions -> LoadingIndicator()
+            uiState.steamSuggestions.isNotEmpty() -> {
+                uiState.steamSuggestions.forEach { user ->
+                    AddFriendRow(
+                        user = user,
+                        isPendingFromThem = user.id in uiState.pendingFromUserIds,
+                        isSent = user.id in uiState.sentTo,
+                        onAddClick = { viewModel.sendRequest(user) }
+                    )
+                }
+            }
+            else -> {
+                EmptyState(
+                    title = "No Steam suggestions",
+                    message = uiState.steamSuggestionsMessage
+                        ?: "None of your Steam friends have linked their account yet."
+                )
+            }
+        }
+
         SecondaryButton(
             text = "My QR code",
             onClick = { showQrDialog = true },
@@ -139,7 +177,7 @@ fun AddFriendScreen(
         uiState.error?.let { ErrorText(text = it) }
 
         when {
-            uiState.isLoading && uiState.results.isEmpty() -> LoadingIndicator()
+            uiState.isLoading && uiState.results.isEmpty() -> Unit
 
             uiState.query.trim().length < MIN_QUERY_LENGTH -> {
                 if (uiState.error == null) {

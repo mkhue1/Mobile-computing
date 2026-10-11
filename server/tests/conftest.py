@@ -30,6 +30,10 @@ if not TEST_DB_URL.database.endswith("_test"):
     )
 
 os.environ["DATABASE_URL"] = TEST_DB_URL.render_as_string(hide_password=False)
+os.environ.setdefault("STEAM_API_KEY", "test-steam-key")
+os.environ.setdefault("PUBLIC_BASE_URL", "http://testserver")
+os.environ.setdefault("STEAM_DEEP_LINK_SUCCESS", "gamercalendar://steam/linked")
+os.environ.setdefault("STEAM_DEEP_LINK_ERROR", "gamercalendar://steam/error")
 os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-bytes-long")
 
 import pytest

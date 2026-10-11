@@ -31,4 +31,8 @@ class FriendRepository {
     suspend fun removeFriend(friendId: String) {
         ApiClient.api.removeFriend(friendId)
     }
+
+    suspend fun getSteamFriendSuggestions(): List<User> {
+        return ApiClient.api.getSteamFriendSuggestions()
+    }
 }
