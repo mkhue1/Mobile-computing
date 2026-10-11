@@ -290,24 +290,25 @@ private fun IncomingRequestRow(
     onDecline: () -> Unit
 ) {
     AppCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                UserAvatar(user = requestUi.otherUser)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    UserAvatar(user = requestUi.otherUser)
 
-                Text(
-                    text = requestUi.otherUser?.username ?: "Unknown user",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
+                    Text(
+                        text = requestUi.otherUser?.username ?: "Unknown user",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
 
                 Row {
                     TextButton(onClick = onAccept) {

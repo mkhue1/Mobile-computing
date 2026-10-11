@@ -9,11 +9,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,7 +39,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -60,8 +60,6 @@ import com.example.gamercalendar.ui.components.labels.UserAvatar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.components.layout.SectionTitle
 import com.example.gamercalendar.ui.feature.auth.AuthViewModel
-import com.example.gamercalendar.ui.components.feedback.ErrorText
-import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.util.openCustomTab
 import kotlinx.coroutines.launch
 
@@ -72,10 +70,7 @@ fun UsersScreen(
     userViewModel: UserViewModel = viewModel(),
     steamViewModel: SteamViewModel = viewModel()
 ) {
-    val users by userViewModel.users.collectAsState()
-    val error by userViewModel.error.collectAsState()
-    val username by authViewModel.username.collectAsState()
-    val email by authViewModel.email.collectAsState()
+    val uiState by userViewModel.uiState.collectAsStateWithLifecycle()
     val steamState by steamViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
@@ -89,18 +84,16 @@ fun UsersScreen(
         steamViewModel.consumeAuthUrl()
     }
 
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     // DataStore copies from login, shown until /auth/me returns.
     val storedUsername by authViewModel.username.collectAsStateWithLifecycle()
     val storedEmail by authViewModel.email.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     var showPhotoSheet by remember { mutableStateOf(false) }
     var showRemoveDialog by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
 
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { viewModel.uploadPhoto(context, it) }
+        uri?.let { userViewModel.uploadPhoto(context, it) }
     }
     val launchPicker = {
         pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -115,7 +108,7 @@ fun UsersScreen(
     }
 
     LaunchedEffect(Unit) {
-        viewModel.load()
+        userViewModel.load()
     }
 
     val user = uiState.user
@@ -190,7 +183,6 @@ fun UsersScreen(
         HorizontalDivider()
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text("More options")
         uiState.error?.let {
             ErrorText(text = it)
         }
@@ -241,7 +233,7 @@ fun UsersScreen(
             dismissLabel = "Cancel",
             onConfirm = {
                 showRemoveDialog = false
-                viewModel.removePhoto()
+                userViewModel.removePhoto()
             },
             onDismiss = { showRemoveDialog = false }
         )
