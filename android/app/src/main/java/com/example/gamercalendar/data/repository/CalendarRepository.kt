@@ -125,10 +125,15 @@ class CalendarRepository(private val api: ApiService, private val contentResolve
     }
 
     /** Calendars to ignore, defaults to ignoring google holiday calendars. */
-    private suspend fun excludedCalendarIds(): Set<Long> {
+    suspend fun getExcludedCalendarIds(): Set<Long> {
         val preferences = calendarPreferences ?: return emptySet()
-        return preferences.excludedCalendarIds.first()
-            ?: getCalendars().filter { it.isHoliday }.map { it.id }.toSet()
+        preferences.excludedCalendarIds.first()?.let { return it }
+
+        // first run - get calendars and hide holiday calendars, then set preferences to the default
+        val calendars = getCalendars()
+        val default = calendars.filter { it.isHoliday }.map { it.id }.toSet()
+        preferences.setExcludedCalendarIds(default)
+        return default
     }
 
     /** Loads the phone's events between the two times, leaving out excluded calendars. */
@@ -144,7 +149,7 @@ class CalendarRepository(private val api: ApiService, private val contentResolve
             val localZone = ZoneId.systemDefault()
             val eventList = mutableListOf<ExternalSession>()
 
-            val excludedCalendarIds = excludedCalendarIds()
+            val excludedCalendarIds = getExcludedCalendarIds()
             val selection = if (excludedCalendarIds.isEmpty()) {
                 null
             } else {

@@ -79,6 +79,10 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
     private var eventJob: Job? = null
     private var calendarsLoaded = false
 
+    init {
+        viewModelScope.launch { ensureCalendarsLoaded() }
+    }
+
     fun setViewMode(mode: CalendarViewMode) {
         _viewMode.value = mode
     }
@@ -146,9 +150,7 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
         eventJob?.cancel()
         eventJob = viewModelScope.launch {
             try {
-                ensureCalendarsLoaded()
-                _externalEvents.value =
-                    repository.getExternalEvents(startMillis, endMillis)
+                _externalEvents.value = repository.getExternalEvents(startMillis, endMillis)
             } catch (e: CancellationException) {
                 throw e // never swallow coroutine cancellation
             } catch (e: SecurityException) {
@@ -169,12 +171,13 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
      * stored calendar preferences.
      */
     private suspend fun ensureCalendarsLoaded() {
-        if (calendarsLoaded) return
-        val calendars = repository.getCalendars()
-        _calendars.value = calendars
-        _excludedCalendarIds.value = calendarPreferences.excludedCalendarIds.first()
-            ?: calendars.filter { it.isHoliday }.map { it.id }.toSet()
-        calendarsLoaded = true
+        try {
+            _calendars.value = repository.getCalendars()
+            _excludedCalendarIds.value = repository.getExcludedCalendarIds()
+            calendarsLoaded = true
+        } catch (e: SecurityException) {
+            // no calendar permission yet; tried again on the next events load
+        }
     }
 
     /** :oads/reloads the phone's calendars */
