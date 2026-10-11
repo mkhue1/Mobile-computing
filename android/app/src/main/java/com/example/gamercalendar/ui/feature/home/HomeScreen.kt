@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.ui.components.buttons.DefaultButton
+import com.example.gamercalendar.ui.components.buttons.SecondaryButton
 import com.example.gamercalendar.ui.components.cards.SessionCard
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
@@ -24,6 +25,7 @@ import com.example.gamercalendar.ui.components.layout.ScreenContainer
 fun HomeScreen(
     onCreateSessionClick: () -> Unit,
     onSessionClick: (sessionId: String) -> Unit,
+    onMapClick: () -> Unit,
     viewModel: HomeViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -53,6 +55,12 @@ fun HomeScreen(
             DefaultButton(
                 text = "Create session",
                 onClick = onCreateSessionClick
+            )
+
+            // Temporary entry point until the map has a permanent place in navigation.
+            SecondaryButton(
+                text = "Session map",
+                onClick = onMapClick
             )
 
             if (uiState.invites.isNotEmpty()) {

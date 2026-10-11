@@ -37,6 +37,7 @@ import com.example.gamercalendar.ui.feature.friends.AddFriendScreen
 import com.example.gamercalendar.ui.feature.friends.FriendsHubScreen
 import com.example.gamercalendar.ui.feature.groups.GroupDetailScreen
 import com.example.gamercalendar.ui.feature.home.HomeScreen
+import com.example.gamercalendar.ui.feature.map.SessionsMapScreen
 import com.example.gamercalendar.ui.feature.profile.UsersScreen
 import com.example.gamercalendar.ui.feature.sessions.CreateSessionScreen
 import com.example.gamercalendar.ui.feature.sessions.ManageSessionScreen
@@ -145,7 +146,16 @@ fun AppNavigation(
                     },
                     onSessionClick = { sessionId ->
                         navController.navigate(Routes.manageSession(sessionId))
+                    },
+                    onMapClick = {
+                        navController.navigate(Routes.SESSIONS_MAP)
                     }
+                )
+            }
+
+            composable(Routes.SESSIONS_MAP) {
+                SessionsMapScreen(
+                    onBack = { navController.popBackStack() }
                 )
             }
 
