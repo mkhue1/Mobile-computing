@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.ZoneId
 import java.util.Calendar
 import kotlin.collections.emptyList
 
@@ -263,11 +264,13 @@ class CreateSessionViewModel(
      * */
     suspend fun loadOverlappingSessions(startMillis: Long, endMillis: Long) {
         try {
-
-            val externalOverlaps: List<ExternalSession> = calendarRepository.getExternalEvents(
-                startMillis,
-                endMillis,
-            ).flatMap { it.value }
+            // get clashing external events, ignoring all day events
+            // add 1 milli to start time and - 1 from end time to avoid fake overlaps
+            // (6:00am- 7:00am overlapping with 7:00am-8:00am)
+            val externalOverlaps: List<ExternalSession> = calendarRepository
+                .getExternalEvents(startMillis + 1, endMillis - 1)
+                .values.flatten()
+                .filterNot { it.isAllDay }
             val internalOverlaps: List<GamingSession> = repository.getSessionInRange(startMillis, endMillis)
                 // make sure sessions being edited can't clash with themselves
                 .filter { it.id != sessionId }
