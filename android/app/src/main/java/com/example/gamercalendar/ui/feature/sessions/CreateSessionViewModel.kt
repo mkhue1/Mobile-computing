@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import com.example.gamercalendar.data.api.ApiClient
+import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.model.Game
 import com.example.gamercalendar.data.model.GamingSession
 import com.example.gamercalendar.data.model.SessionCreate
@@ -13,6 +15,7 @@ import com.example.gamercalendar.data.model.SessionVisibility
 import com.example.gamercalendar.data.model.UserGroup
 import com.example.gamercalendar.data.model.GameSearchResult
 import com.example.gamercalendar.data.model.place
+import com.example.gamercalendar.data.repository.CalendarRepository
 import com.example.gamercalendar.data.repository.GroupRepository
 import com.example.gamercalendar.data.repository.PlaceRepository
 import com.example.gamercalendar.data.repository.PlaceSuggestion
@@ -105,6 +108,7 @@ data class CreateSessionUiState(
     val isSubmitting: Boolean = false,
     val error: String? = null,
     val savedSession: GamingSession? = null,
+    val overlappingSessions:  List<GeneralSession> = emptyList(),
 
     val isEditing: Boolean = false,
     val isLoadingSession: Boolean = false,
@@ -123,6 +127,11 @@ data class CreateSessionUiState(
         get() = !isEditing
 }
 
+sealed interface GeneralSession
+
+data class Session(val session: GamingSession) : GeneralSession
+data class ExternalSession(val session: ExternalSession) : GeneralSession
+
 class CreateSessionViewModel(
     application: Application,
     savedStateHandle: SavedStateHandle
@@ -134,6 +143,7 @@ class CreateSessionViewModel(
     private val repository = SessionRepository()
     private val groupRepository = GroupRepository()
     private val placeRepository = PlaceRepository.createOrNull(application)
+    private val calendarRepository = CalendarRepository(api = ApiClient.api, contentResolver = application.contentResolver)
 
     private val _uiState = MutableStateFlow(
         CreateSessionUiState(isEditing = sessionId != null, canSearchPlaces = placeRepository != null)
@@ -204,6 +214,27 @@ class CreateSessionViewModel(
             }
         }
     }
+
+    fun loadOverlappingSessions(startMillis: Long, endMillis: Long, excludedCalendarIds: Set<Long> = emptySet()) {
+        viewModelScope.launch {
+            try {
+
+                val externalOverlaps = calendarRepository.getExternalEvents(
+                    startMillis,
+                    endMillis, excludedCalendarIds
+                ).flatMap { it.value }
+
+                val internalOverlaps = repository.
+
+                val overlaps = overlappingSessions
+                _uiState.update { it.copy(overlappingSessions = overlaps) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(overlappingSessions = emptyList()) }
+            }
+
+        }
+    }
+
 
     fun loadGroups() {
         viewModelScope.launch {

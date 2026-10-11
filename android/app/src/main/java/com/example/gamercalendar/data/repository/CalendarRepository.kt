@@ -54,7 +54,7 @@ private const val CALENDAR_ACCOUNT_INDEX: Int = 2
 private const val CALENDAR_COLOR_INDEX: Int = 3
 private const val CALENDAR_OWNER_INDEX: Int = 4
 
-
+// TODO - potentially update this to import the ApiClient like the other repositories do, rather than feed in ApiService
 class CalendarRepository(private val api: ApiService, private val contentResolver: ContentResolver) {
 
     /** Loads the user's sessions, excluding cancel ones, sorted by date and start time. */
