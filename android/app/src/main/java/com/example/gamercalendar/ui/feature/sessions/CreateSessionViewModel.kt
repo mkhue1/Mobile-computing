@@ -4,31 +4,44 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import com.example.gamercalendar.data.api.ApiClient
+import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.model.Game
 import com.example.gamercalendar.data.model.GamingSession
 import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionPlace
+import com.example.gamercalendar.data.model.SessionStatus
 import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.model.SessionVisibility
 import com.example.gamercalendar.data.model.UserGroup
 import com.example.gamercalendar.data.model.GameSearchResult
 import com.example.gamercalendar.data.model.place
+import com.example.gamercalendar.data.repository.CalendarRepository
 import com.example.gamercalendar.data.repository.GroupRepository
 import com.example.gamercalendar.data.repository.PlaceRepository
 import com.example.gamercalendar.data.repository.PlaceSuggestion
 import com.example.gamercalendar.data.repository.SessionRepository
+import com.example.gamercalendar.data.session.CalendarPreferences
 import com.example.gamercalendar.ui.navigation.Routes
 import com.example.gamercalendar.util.SessionTime
 import com.example.gamercalendar.util.apiErrorDetail
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.ZoneId
 import java.util.Calendar
+import kotlin.collections.emptyList
 
 private const val GAME_SEARCH_DEBOUNCE_MS = 250L
 private const val PLACE_SEARCH_DEBOUNCE_MS = 250L
@@ -105,6 +118,7 @@ data class CreateSessionUiState(
     val isSubmitting: Boolean = false,
     val error: String? = null,
     val savedSession: GamingSession? = null,
+    val overlappingSessions:  List<Overlap> = emptyList(),
 
     val isEditing: Boolean = false,
     val isLoadingSession: Boolean = false,
@@ -123,6 +137,10 @@ data class CreateSessionUiState(
         get() = !isEditing
 }
 
+sealed interface Overlap
+data class InternalOverlap(val session: GamingSession) : Overlap
+data class ExternalOverlap(val session: ExternalSession) : Overlap
+
 class CreateSessionViewModel(
     application: Application,
     savedStateHandle: SavedStateHandle
@@ -134,6 +152,7 @@ class CreateSessionViewModel(
     private val repository = SessionRepository()
     private val groupRepository = GroupRepository()
     private val placeRepository = PlaceRepository.createOrNull(application)
+    private val calendarRepository = CalendarRepository(api = ApiClient.api, contentResolver = application.contentResolver, calendarPreferences = CalendarPreferences(application))
 
     private val _uiState = MutableStateFlow(
         CreateSessionUiState(isEditing = sessionId != null, canSearchPlaces = placeRepository != null)
@@ -145,10 +164,45 @@ class CreateSessionViewModel(
     private var placeSearchJob: Job? = null
     private var placeSelectJob: Job? = null
 
+    // The start and end the time picker would give if the user pressed OK, needed so that
+    // the overlap warning follows the dial.
+    private val previewRange = MutableStateFlow<Pair<Long, Long>?>(null)
+
     init {
         loadGroups()
         loadExistingSession()
+        watchForOverlaps()
     }
+
+    // opt in so can use debounce!
+    @OptIn(FlowPreview::class)
+    private fun watchForOverlaps() {
+        viewModelScope.launch {
+            val formRange = _uiState.map { it.form.startEpochMillis to it.form.endEpochMillis }
+            // While time picker is open, check its time rather than saved one.
+            combine(formRange, previewRange) { saved, preview -> preview ?: saved }
+                .distinctUntilChanged()
+                .debounce(300)
+                .collectLatest { (start, end) -> loadOverlappingSessions(start, end) }
+        }
+    }
+
+    /** Called when time picker's dial moves to update preview time]*/
+    fun previewTime(isStart: Boolean, hour: Int, minute: Int) {
+        val form = _uiState.value.form
+        val draft = if (isStart) {
+            form.copy(startHour = hour, startMinute = minute)
+        } else {
+            form.copy(endHour = hour, endMinute = minute)
+        }
+        previewRange.value = draft.startEpochMillis to draft.endEpochMillis
+    }
+
+    /** Called when time picker closes */
+    fun clearTimePreview() {
+        previewRange.value = null
+    }
+
 
     fun loadExistingSession() {
         val sessionId = sessionId ?: return
@@ -204,6 +258,31 @@ class CreateSessionViewModel(
             }
         }
     }
+
+    /** Gets all overlapping sessions (external + interal) in the given time range.
+     *  suspend function as caller watchForOverlaps() alreadyt starts a coroutine.
+     * */
+    suspend fun loadOverlappingSessions(startMillis: Long, endMillis: Long) {
+        try {
+            // get clashing external events, ignoring all day events
+            // add 1 milli to start time and - 1 from end time to avoid fake overlaps
+            // (6:00am- 7:00am overlapping with 7:00am-8:00am)
+            val externalOverlaps: List<ExternalSession> = calendarRepository
+                .getExternalEvents(startMillis + 1, endMillis - 1)
+                .values.flatten()
+                .filterNot { it.isAllDay }
+            val internalOverlaps: List<GamingSession> = repository.getSessionInRange(startMillis, endMillis)
+                // make sure sessions being edited can't clash with themselves
+                .filter { it.id != sessionId }
+            val overlaps: List<Overlap> = (externalOverlaps.map { ExternalOverlap(it) } + internalOverlaps.map { InternalOverlap(it)  })
+            _uiState.update { it.copy(overlappingSessions = overlaps) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _uiState.update { it.copy(overlappingSessions = emptyList()) }
+        }
+    }
+
 
     fun loadGroups() {
         viewModelScope.launch {
