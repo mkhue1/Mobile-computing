@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // TODO: REMOVE LAN PERMISSIONS WHEN WE DEPLOY
         if (
             Build.VERSION.SDK_INT >= 37 &&
             ContextCompat.checkSelfPermission(
