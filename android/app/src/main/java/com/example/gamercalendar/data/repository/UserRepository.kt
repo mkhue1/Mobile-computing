@@ -13,6 +13,10 @@ class UserRepository {
         return ApiClient.api.getUsers(search = search, limit = limit)
     }
 
+    suspend fun getUser(userId: String): User {
+        return ApiClient.api.getUser(userId)
+    }
+
     suspend fun getCurrentUser(): User {
         return ApiClient.api.me().also { CurrentUserStore.set(it) }
     }
