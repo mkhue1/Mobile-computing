@@ -9,8 +9,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -27,6 +31,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,26 +60,40 @@ import com.example.gamercalendar.ui.components.labels.UserAvatar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.components.layout.SectionTitle
 import com.example.gamercalendar.ui.feature.auth.AuthViewModel
+import com.example.gamercalendar.util.openCustomTab
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UsersScreen(
     authViewModel: AuthViewModel,
-    viewModel: UserViewModel = viewModel()
+    userViewModel: UserViewModel = viewModel(),
+    steamViewModel: SteamViewModel = viewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState by userViewModel.uiState.collectAsStateWithLifecycle()
+    val steamState by steamViewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        steamViewModel.refresh()
+    }
+
+    LaunchedEffect(steamState.authUrl) {
+        val url = steamState.authUrl ?: return@LaunchedEffect
+        openCustomTab(context, url)
+        steamViewModel.consumeAuthUrl()
+    }
+
     // DataStore copies from login, shown until /auth/me returns.
     val storedUsername by authViewModel.username.collectAsStateWithLifecycle()
     val storedEmail by authViewModel.email.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     var showPhotoSheet by remember { mutableStateOf(false) }
     var showRemoveDialog by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
 
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { viewModel.uploadPhoto(context, it) }
+        uri?.let { userViewModel.uploadPhoto(context, it) }
     }
     val launchPicker = {
         pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -89,7 +108,7 @@ fun UsersScreen(
     }
 
     LaunchedEffect(Unit) {
-        viewModel.load()
+        userViewModel.load()
     }
 
     val user = uiState.user
@@ -131,6 +150,38 @@ fun UsersScreen(
         if (uiState.isLoading && user == null) {
             LoadingIndicator()
         }
+
+        Text(
+            text = "Steam account",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        when {
+            steamState.isLoading -> LoadingIndicator()
+            steamState.linked -> {
+                Text("Connected${steamState.steamId?.let { " ($it)" } ?: ""}")
+                TextButton(onClick = steamViewModel::disconnectSteam) {
+                    Text("Disconnect Steam")
+                }
+            }
+            else -> {
+                Text("Not connected")
+                Button(
+                    onClick = steamViewModel::connectSteam,
+                    enabled = !steamState.isConnecting,
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Text(if (steamState.isConnecting) "Connecting…" else "Connect Steam")
+                }
+            }
+        }
+
+        steamState.message?.let { Text(it) }
+        steamState.error?.let { ErrorText(text = it) }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider()
+        Spacer(modifier = Modifier.height(8.dp))
 
         uiState.error?.let {
             ErrorText(text = it)
@@ -182,7 +233,7 @@ fun UsersScreen(
             dismissLabel = "Cancel",
             onConfirm = {
                 showRemoveDialog = false
-                viewModel.removePhoto()
+                userViewModel.removePhoto()
             },
             onDismiss = { showRemoveDialog = false }
         )

@@ -1,6 +1,7 @@
 package com.example.gamercalendar.ui.feature.friends
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +37,7 @@ import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.ui.components.labels.Tag
 import com.example.gamercalendar.ui.components.labels.UserAvatar
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
+
 private val TAB_TITLES = listOf("Friends", "Requests", "Groups")
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -288,35 +290,64 @@ private fun IncomingRequestRow(
     onDecline: () -> Unit
 ) {
     AppCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                UserAvatar(user = requestUi.otherUser)
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    UserAvatar(user = requestUi.otherUser)
 
-                Text(
-                    text = requestUi.otherUser?.username ?: "Unknown user",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                    Text(
+                        text = requestUi.otherUser?.username ?: "Unknown user",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Row {
+                    TextButton(onClick = onAccept) {
+                        Text(text = "Accept", color = MaterialTheme.colorScheme.primary)
+                    }
+                    TextButton(onClick = onDecline) {
+                        Text(text = "Decline", color = MaterialTheme.colorScheme.error)
+                    }
+                }
             }
 
-            Row {
-                TextButton(onClick = onAccept) {
-                    Text(text = "Accept", color = MaterialTheme.colorScheme.primary)
-                }
-                TextButton(onClick = onDecline) {
-                    Text(text = "Decline", color = MaterialTheme.colorScheme.error)
-                }
-            }
+            SteamRelationHint(
+                relation = requestUi.request.steam_relation,
+                personaName = requestUi.request.steam_persona_name
+            )
         }
     }
+}
+
+@Composable
+private fun SteamRelationHint(
+    relation: String?,
+    personaName: String?
+) {
+    val (label, tagColor) = when (relation) {
+        "mutual" -> {
+            val text = if (!personaName.isNullOrBlank()) {
+                "Steam friend · $personaName"
+            } else {
+                "Steam friend"
+            }
+            text to MaterialTheme.colorScheme.primary
+        }
+        "not_friends" -> "Not a Steam friend" to MaterialTheme.colorScheme.onSurfaceVariant
+        "not_linked" -> "No Steam account linked" to MaterialTheme.colorScheme.onSurfaceVariant
+        else -> return
+    }
+
+    Tag(text = label, color = tagColor)
 }
 
 @Composable

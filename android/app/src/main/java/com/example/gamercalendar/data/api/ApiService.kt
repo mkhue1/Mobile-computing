@@ -19,6 +19,8 @@ import com.example.gamercalendar.data.model.SessionCancelResponse
 import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionParticipant
+import com.example.gamercalendar.data.model.SteamLinkStart
+import com.example.gamercalendar.data.model.SteamStatus
 import com.example.gamercalendar.data.model.TokenResponse
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserCreate
@@ -43,6 +45,11 @@ interface ApiService {
         @Query("search") search: String? = null,
         @Query("limit") limit: Int? = null
     ): List<User>
+
+    @GET("users/{userId}")
+    suspend fun getUser(
+        @Path("userId") userId: String
+    ): User
 
     @POST("users/")
     suspend fun createUser(
@@ -103,6 +110,17 @@ interface ApiService {
     suspend fun searchGames(
         @Query("q") query: String
     ): List<GameSearchResult>
+    @GET("friends/suggestions/steam")
+    suspend fun getSteamFriendSuggestions(): List<User>
+
+    @GET("steam/status")
+    suspend fun getSteamStatus(): SteamStatus
+
+    @GET("steam/link")
+    suspend fun startSteamLink(): SteamLinkStart
+
+    @DELETE("steam/link")
+    suspend fun unlinkSteam()
 
     @GET("groups/")
     suspend fun getGroups(): List<UserGroup>

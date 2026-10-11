@@ -42,6 +42,48 @@ def create_access_token(user_id: UUID) -> str:
     )
 
 
+def create_steam_link_state(user_id: UUID) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.steam_link_state_expire_minutes
+    )
+    payload = {
+        "sub": str(user_id),
+        "purpose": "steam_link",
+        "exp": expire,
+    }
+    return jwt.encode(
+        payload,
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def decode_steam_link_state(token: str) -> UUID:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+        if payload.get("purpose") != "steam_link":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid Steam link state",
+            )
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid Steam link state",
+            )
+        return UUID(user_id)
+    except (jwt.PyJWTError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired Steam link state",
+        )
+
+
 def decode_access_token(token: str) -> UUID:
     try:
         payload = jwt.decode(
