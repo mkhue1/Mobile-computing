@@ -219,14 +219,14 @@ class CreateSessionViewModel(
         viewModelScope.launch {
             try {
 
-                val externalOverlaps = calendarRepository.getExternalEvents(
+                val externalOverlaps: List<ExternalSession> = calendarRepository.getExternalEvents(
                     startMillis,
                     endMillis, excludedCalendarIds
                 ).flatMap { it.value }
 
-                val internalOverlaps = repository.
+                val internalOverlaps: List<GamingSession> = repository.getSessionInRange(startMillis, endMillis)
 
-                val overlaps = overlappingSessions
+                val overlaps: List<GeneralSession> = (externalOverlaps + internalOverlaps) as List<GeneralSession>
                 _uiState.update { it.copy(overlappingSessions = overlaps) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(overlappingSessions = emptyList()) }

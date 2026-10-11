@@ -178,9 +178,4 @@ class CalendarRepository(private val api: ApiService, private val contentResolve
         }
     }
 
-
-
-
-
-
 }

@@ -12,6 +12,7 @@ import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionParticipant
 import com.example.gamercalendar.data.model.GameSearchResult
+import com.example.gamercalendar.util.SessionTime
 
 class SessionRepository {
 
@@ -38,6 +39,10 @@ class SessionRepository {
 
     suspend fun getSession(sessionId: String): GamingSession {
         return ApiClient.api.getSession(sessionId)
+    }
+
+    suspend fun getSessionInRange(startMillis: Long, endMillis: Long): List<GamingSession> {
+        return ApiClient.api.getSessionsInRange(SessionTime.toIsoUtc(startMillis), SessionTime.toIsoUtc(endMillis))
     }
 
     suspend fun createSession(session: SessionCreate): GamingSession {
