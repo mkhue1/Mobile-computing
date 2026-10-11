@@ -46,6 +46,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -331,9 +332,15 @@ fun CreateSessionScreen(
                         it.copy(endHour = hour, endMinute = minute)
                     }
                 }
+                viewModel.clearTimePreview()
                 editingTime = null
             },
-            onDismiss = { editingTime = null }
+            onDismiss = {
+                viewModel.clearTimePreview()
+                editingTime = null
+            },
+            onTimeChange = { hour, minute -> viewModel.previewTime(isStart, hour, minute) },
+            overlaps = uiState.overlappingSessions
         )
     }
 }
@@ -745,7 +752,9 @@ private fun SessionTimePickerDialog(
     initialHour: Int,
     initialMinute: Int,
     onConfirm: (hour: Int, minute: Int) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onTimeChange: (hour: Int, minute: Int) -> Unit,
+    overlaps: List<Overlap>
 ) {
     val context = LocalContext.current
     val state = rememberTimePickerState(
@@ -754,10 +763,26 @@ private fun SessionTimePickerDialog(
         is24Hour = DateFormat.is24HourFormat(context)
     )
 
+    // onTimeChange only goes when time is saved. snapshot flow calls onTimeChange when the
+    // state of the picker itself changes so that overlaps are selected based off values in picker
+    // before they are saved
+    LaunchedEffect(state) {
+        snapshotFlow { state.hour to state.minute }.collect { (hour, minute) ->
+            onTimeChange(hour, minute)
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { TimePicker(state = state) },
+        text = {
+            Column {
+                TimePicker(state = state)
+                if (overlaps.isNotEmpty()) {
+                    OverlapWarning(overlaps)
+                }
+            }
+        },
         confirmButton = {
             TextButton(onClick = { onConfirm(state.hour, state.minute) }) {
                 Text("OK")
@@ -768,5 +793,29 @@ private fun SessionTimePickerDialog(
                 Text("Cancel")
             }
         }
+    )
+}
+
+
+private const val MAX_NAMED_OVERLAPS = 1
+
+/** Warning popup for overlaps with other sessions or calendar events */
+@Composable
+private fun OverlapWarning(overlaps: List<Overlap>) {
+    val titles = overlaps.map { overlap ->
+        when (overlap) {
+            is InternalOverlap -> overlap.session.title?.takeIf { it.isNotBlank() } ?: overlap.session.game.name
+            is ExternalOverlap -> overlap.session.title.ifBlank { "Untitled event" }
+        }
+    }
+    val named = titles.take(MAX_NAMED_OVERLAPS).joinToString(", ")
+    val hidden = titles.size - MAX_NAMED_OVERLAPS
+    val count = if (titles.size == 1) "1 event" else "${titles.size} events"
+
+    Text(
+        text = "Overlaps with $count: $named" + if (hidden > 0) " and $hidden more" else "",
+        modifier = Modifier.padding(top = 8.dp),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.error
     )
 }

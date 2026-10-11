@@ -10,6 +10,7 @@ import com.example.gamercalendar.data.model.Game
 import com.example.gamercalendar.data.model.GamingSession
 import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionPlace
+import com.example.gamercalendar.data.model.SessionStatus
 import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.model.SessionVisibility
 import com.example.gamercalendar.data.model.UserGroup
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -160,6 +162,10 @@ class CreateSessionViewModel(
     private var placeSearchJob: Job? = null
     private var placeSelectJob: Job? = null
 
+    // The start and end the time picker would give if the user pressed OK, needed so that
+    // the overlap warning follows the dial.
+    private val previewRange = MutableStateFlow<Pair<Long, Long>?>(null)
+
     init {
         loadGroups()
         loadExistingSession()
@@ -170,12 +176,29 @@ class CreateSessionViewModel(
     @OptIn(FlowPreview::class)
     private fun watchForOverlaps() {
         viewModelScope.launch {
-            _uiState
-                .map { it.form.startEpochMillis to it.form.endEpochMillis }
+            val formRange = _uiState.map { it.form.startEpochMillis to it.form.endEpochMillis }
+            // While time picker is open, check its time rather than saved one.
+            combine(formRange, previewRange) { saved, preview -> preview ?: saved }
                 .distinctUntilChanged()
                 .debounce(300)
                 .collectLatest { (start, end) -> loadOverlappingSessions(start, end) }
         }
+    }
+
+    /** Called when time picker's dial moves to update preview time]*/
+    fun previewTime(isStart: Boolean, hour: Int, minute: Int) {
+        val form = _uiState.value.form
+        val draft = if (isStart) {
+            form.copy(startHour = hour, startMinute = minute)
+        } else {
+            form.copy(endHour = hour, endMinute = minute)
+        }
+        previewRange.value = draft.startEpochMillis to draft.endEpochMillis
+    }
+
+    /** Called when time picker closes */
+    fun clearTimePreview() {
+        previewRange.value = null
     }
 
 
@@ -245,8 +268,12 @@ class CreateSessionViewModel(
                 endMillis, excludedCalendarIds
             ).flatMap { it.value }
             val internalOverlaps: List<GamingSession> = repository.getSessionInRange(startMillis, endMillis)
+                // make sure sessions being edited can't clash with themselves
+                .filter { it.id != sessionId }
             val overlaps: List<Overlap> = (externalOverlaps.map { ExternalOverlap(it) } + internalOverlaps.map { InternalOverlap(it)  })
             _uiState.update { it.copy(overlappingSessions = overlaps) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             _uiState.update { it.copy(overlappingSessions = emptyList()) }
         }
