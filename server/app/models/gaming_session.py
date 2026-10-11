@@ -9,6 +9,7 @@ from sqlalchemy import (
     Double,
     Enum as SQLEnum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -245,6 +246,7 @@ class GamingSession(Base):
             "location_lng IS NULL OR location_lng BETWEEN -180 AND 180",
             name="ck_sessions_location_lng_range",
         ),
+        Index("ix_sessions_location", "location_lat", "location_lng"),
     )
 
 

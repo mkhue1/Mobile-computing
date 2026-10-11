@@ -7,6 +7,7 @@ import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserCreate
 import com.example.gamercalendar.data.session.CurrentUserStore
 import com.example.gamercalendar.data.session.SessionManager
+import com.example.gamercalendar.geofence.SessionGeofences
 
 class AuthRepository(
     private val sessionManager: SessionManager
@@ -44,6 +45,7 @@ class AuthRepository(
     }
 
     suspend fun logout() {
+        SessionGeofences.disable()
         sessionManager.clearSession()
         CurrentUserStore.clear()
     }

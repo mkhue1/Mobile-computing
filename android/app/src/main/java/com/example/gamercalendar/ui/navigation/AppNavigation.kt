@@ -36,6 +36,8 @@ import com.example.gamercalendar.ui.feature.auth.AuthViewModel
 import com.example.gamercalendar.ui.feature.friends.AddFriendScreen
 import com.example.gamercalendar.ui.feature.friends.FriendsHubScreen
 import com.example.gamercalendar.ui.feature.groups.GroupDetailScreen
+import com.example.gamercalendar.geofence.NearbyOpenEvents
+import com.example.gamercalendar.geofence.SessionGeofences
 import com.example.gamercalendar.ui.feature.home.HomeScreen
 import com.example.gamercalendar.ui.feature.map.SessionsMapScreen
 import com.example.gamercalendar.ui.feature.profile.UsersScreen
@@ -54,6 +56,7 @@ fun AppNavigation(
     val currentRoute = backStackEntry?.destination?.route
 
     val currentUser by CurrentUserStore.user.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     // A cold start with a stored token skips login, so fetch the user here to fill CurrentUserStore.
     LaunchedEffect(Unit) {
@@ -63,6 +66,29 @@ fun AppNavigation(
             throw e
         } catch (_: Exception) {
             // Keep the default profile icon; screens surface their own errors.
+        }
+        try {
+            SessionGeofences.refreshIfEnabled(context)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // The home switch surfaces a failure when nearby sessions are turned on.
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        NearbyOpenEvents.requests.collect { sessionId ->
+            NearbyOpenEvents.clear()
+            if (sessionId == null) {
+                navController.navigate(Routes.ITEM_1) {
+                    launchSingleTop = true
+                    popUpTo(Routes.ITEM_1) { inclusive = true }
+                }
+            } else {
+                navController.navigate(Routes.manageSession(sessionId)) {
+                    launchSingleTop = true
+                }
+            }
         }
     }
 

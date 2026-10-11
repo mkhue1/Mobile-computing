@@ -632,6 +632,53 @@ def test_public_in_person_sessions_for_the_map(client, make_user, auth_headers, 
     assert [session["id"] for session in included.json()] == [placed["id"]]
 
 
+def test_nearby_public_sessions_are_this_week_and_within_range(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    near = create_session(
+        organiser, visibility="public", session_type="in_person", **GOOD_GAMES
+    )
+    far = {**GOOD_GAMES, "location_name": "Far away", "location_lat": -37.0, "location_lng": 144.9631}
+    create_session(organiser, visibility="public", session_type="in_person", **far)
+    later = datetime.now(timezone.utc) + timedelta(days=8)
+    create_session(
+        organiser,
+        visibility="public",
+        session_type="in_person",
+        start_at=later.isoformat(),
+        end_at=(later + timedelta(hours=2)).isoformat(),
+        **GOOD_GAMES,
+    )
+
+    response = client.get(
+        "/sessions/public",
+        params={
+            "session_type": "in_person",
+            "has_location": True,
+            "include_joined": True,
+            "near_lat": GOOD_GAMES["location_lat"],
+            "near_lng": GOOD_GAMES["location_lng"],
+            "radius_km": 30,
+            "within_days": 7,
+        },
+        headers=auth_headers(make_user("stranger")),
+    )
+
+    assert response.status_code == 200, response.text
+    assert [session["id"] for session in response.json()] == [near["id"]]
+
+
+def test_nearby_public_sessions_require_both_coordinates(client, make_user, auth_headers):
+    response = client.get(
+        "/sessions/public",
+        params={"near_lat": -37.8136},
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 400
+
+
 def test_create_in_person_session_with_name_only(make_user, create_session):
     session = create_session(make_user(), session_type="in_person", location_name="Alex's place")
 
