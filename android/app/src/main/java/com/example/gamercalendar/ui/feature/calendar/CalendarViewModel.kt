@@ -1,6 +1,6 @@
 package com.example.gamercalendar.ui.feature.calendar
 
-import android.content.ContentResolver
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,6 +10,7 @@ import com.example.gamercalendar.data.model.CalendarSession
 import com.example.gamercalendar.data.model.ExternalCalendar
 import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.repository.CalendarRepository
+import com.example.gamercalendar.data.session.CalendarPreferences
 import java.io.IOException
 import java.time.LocalDate
 import java.time.YearMonth
@@ -19,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -40,7 +42,7 @@ data class CalendarUiState(
  * phone's calendar, and remembers which view is showing and which day is selected, so switching
  * views keeps the day. Each view then has its own view model that builds what it shows from these.
  */
-class CalendarViewModel(private val repository: CalendarRepository) : ViewModel() {
+class CalendarViewModel(private val repository: CalendarRepository, private val calendarPreferences: CalendarPreferences) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CalendarUiState())
     val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
@@ -146,7 +148,7 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
             try {
                 ensureCalendarsLoaded()
                 _externalEvents.value =
-                    repository.getExternalEvents(startMillis, endMillis, _excludedCalendarIds.value)
+                    repository.getExternalEvents(startMillis, endMillis)
             } catch (e: CancellationException) {
                 throw e // never swallow coroutine cancellation
             } catch (e: SecurityException) {
@@ -163,14 +165,15 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
     }
 
     /**
-     * The first time ran, reads the phone's calendars and hides holidays
-     * so holidays don't appear and then disappear.
+     * Prepares calendar pickers state by getting existing calendars and applying
+     * stored calendar preferences.
      */
     private suspend fun ensureCalendarsLoaded() {
         if (calendarsLoaded) return
         val calendars = repository.getCalendars()
         _calendars.value = calendars
-        _excludedCalendarIds.value = calendars.filter { it.isHoliday }.map { it.id }.toSet()
+        _excludedCalendarIds.value = calendarPreferences.excludedCalendarIds.first()
+            ?: calendars.filter { it.isHoliday }.map { it.id }.toSet()
         calendarsLoaded = true
     }
 
@@ -191,21 +194,27 @@ class CalendarViewModel(private val repository: CalendarRepository) : ViewModel(
     fun setExcludedCalendars(ids: Set<Long>) {
         if (ids == _excludedCalendarIds.value) return
         _excludedCalendarIds.value = ids
-        calendarsLoaded = true
-        loadedAround = null
-        requestedMonth?.let { loadEventsAround(it) }
+        viewModelScope.launch {
+            calendarPreferences.setExcludedCalendarIds(ids)
+            loadedAround = null
+            requestedMonth?.let { loadEventsAround(it) } }
     }
 }
 
 class CalendarViewModelFactory(
-    private val contentResolver: ContentResolver,
+    context: Context,
     private val api: ApiService = ApiClient.api
 ) : ViewModelProvider.Factory {
+    // factory can outlive the screen creating it, so only hold the app's context
+    private val appContext = context.applicationContext
+
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         require(modelClass.isAssignableFrom(CalendarViewModel::class.java)) {
             "Unknown ViewModel class: ${modelClass.name}"
         }
-        return CalendarViewModel(CalendarRepository(api, contentResolver)) as T
+        val calendarPreferences = CalendarPreferences(appContext)
+        val repository = CalendarRepository(api, appContext.contentResolver, calendarPreferences)
+        return CalendarViewModel(repository, calendarPreferences) as T
     }
 }

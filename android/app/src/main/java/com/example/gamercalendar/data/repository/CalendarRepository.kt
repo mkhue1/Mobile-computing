@@ -12,7 +12,9 @@ import com.example.gamercalendar.data.model.CalendarSession
 import com.example.gamercalendar.data.model.ExternalCalendar
 import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.model.GamingSession
+import com.example.gamercalendar.data.session.CalendarPreferences
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
@@ -55,7 +57,7 @@ private const val CALENDAR_COLOR_INDEX: Int = 3
 private const val CALENDAR_OWNER_INDEX: Int = 4
 
 // TODO - potentially update this to import the ApiClient like the other repositories do, rather than feed in ApiService
-class CalendarRepository(private val api: ApiService, private val contentResolver: ContentResolver) {
+class CalendarRepository(private val api: ApiService, private val contentResolver: ContentResolver, private val calendarPreferences: CalendarPreferences? = null) {
 
     /** Loads the user's sessions, excluding cancel ones, sorted by date and start time. */
     suspend fun getMySessions(): List<CalendarSession> {
@@ -122,11 +124,17 @@ class CalendarRepository(private val api: ApiService, private val contentResolve
         }
     }
 
+    /** Calendars to ignore, defaults to ignoring google holiday calendars. */
+    private suspend fun excludedCalendarIds(): Set<Long> {
+        val preferences = calendarPreferences ?: return emptySet()
+        return preferences.excludedCalendarIds.first()
+            ?: getCalendars().filter { it.isHoliday }.map { it.id }.toSet()
+    }
+
     /** Loads the phone's events between the two times, leaving out excluded calendars. */
     suspend fun getExternalEvents(
         startMillis: Long,
         endMillis: Long,
-        excludedCalendarIds: Set<Long> = emptySet()
     ): Map<LocalDate, List<ExternalSession>> {
         return withContext(Dispatchers.IO) {
             // calendar instance search needs to provide start and end time for search and add it to URI path
@@ -135,10 +143,12 @@ class CalendarRepository(private val api: ApiService, private val contentResolve
             ContentUris.appendId(builder, endMillis)
             val localZone = ZoneId.systemDefault()
             val eventList = mutableListOf<ExternalSession>()
-            // selection has one ? placeholder per hidden calendar
+
+            val excludedCalendarIds = excludedCalendarIds()
             val selection = if (excludedCalendarIds.isEmpty()) {
                 null
             } else {
+                // selection has one ? placeholder per hidden calendar
                 "${CalendarContract.Instances.CALENDAR_ID} NOT IN (${excludedCalendarIds.joinToString { "?" }})"
             }
             val selectionArgs = excludedCalendarIds.map { it.toString() }.toTypedArray()

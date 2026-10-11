@@ -21,6 +21,7 @@ import com.example.gamercalendar.data.repository.GroupRepository
 import com.example.gamercalendar.data.repository.PlaceRepository
 import com.example.gamercalendar.data.repository.PlaceSuggestion
 import com.example.gamercalendar.data.repository.SessionRepository
+import com.example.gamercalendar.data.session.CalendarPreferences
 import com.example.gamercalendar.ui.navigation.Routes
 import com.example.gamercalendar.util.SessionTime
 import com.example.gamercalendar.util.apiErrorDetail
@@ -150,7 +151,7 @@ class CreateSessionViewModel(
     private val repository = SessionRepository()
     private val groupRepository = GroupRepository()
     private val placeRepository = PlaceRepository.createOrNull(application)
-    private val calendarRepository = CalendarRepository(api = ApiClient.api, contentResolver = application.contentResolver)
+    private val calendarRepository = CalendarRepository(api = ApiClient.api, contentResolver = application.contentResolver, calendarPreferences = CalendarPreferences(application))
 
     private val _uiState = MutableStateFlow(
         CreateSessionUiState(isEditing = sessionId != null, canSearchPlaces = placeRepository != null)
@@ -260,12 +261,12 @@ class CreateSessionViewModel(
     /** Gets all overlapping sessions (external + interal) in the given time range.
      *  suspend function as caller watchForOverlaps() alreadyt starts a coroutine.
      * */
-    suspend fun loadOverlappingSessions(startMillis: Long, endMillis: Long, excludedCalendarIds: Set<Long> = emptySet()) {
+    suspend fun loadOverlappingSessions(startMillis: Long, endMillis: Long) {
         try {
 
             val externalOverlaps: List<ExternalSession> = calendarRepository.getExternalEvents(
                 startMillis,
-                endMillis, excludedCalendarIds
+                endMillis,
             ).flatMap { it.value }
             val internalOverlaps: List<GamingSession> = repository.getSessionInRange(startMillis, endMillis)
                 // make sure sessions being edited can't clash with themselves

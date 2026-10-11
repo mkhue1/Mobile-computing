@@ -180,7 +180,7 @@ fun AppNavigation(
 
             composable(Routes.ITEM_2) {
                 val calendarViewModel: CalendarViewModel = viewModel(
-                    factory = CalendarViewModelFactory(contentResolver = LocalContext.current.applicationContext.contentResolver)
+                    factory = CalendarViewModelFactory(context = LocalContext.current)
                 )
                 CalendarScreen(
                     viewModel = calendarViewModel,
