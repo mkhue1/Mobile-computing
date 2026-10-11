@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gamercalendar.data.repository.UserRepository
 import com.example.gamercalendar.data.session.CurrentUserStore
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.ui.feature.calendar.CalendarScreen
 import com.example.gamercalendar.ui.feature.calendar.CalendarViewModel
@@ -178,7 +179,9 @@ fun AppNavigation(
             }
 
             composable(Routes.ITEM_2) {
-                val calendarViewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory())
+                val calendarViewModel: CalendarViewModel = viewModel(
+                    factory = CalendarViewModelFactory(contentResolver = LocalContext.current.applicationContext.contentResolver)
+                )
                 CalendarScreen(
                     viewModel = calendarViewModel,
                     onSessionClick = { sessionId -> navController.navigate(Routes.manageSession(sessionId))
@@ -199,7 +202,9 @@ fun AppNavigation(
             }
 
             composable(Routes.ITEM_5) {
-                val searchViewModel: SearchViewModel = viewModel(factory = SearchViewModelFactory())
+                val searchViewModel: SearchViewModel = viewModel(
+                    factory = SearchViewModelFactory(contentResolver = LocalContext.current.applicationContext.contentResolver)
+                )
                 SearchScreen(
                     viewModel = searchViewModel,
                     onSessionClick = { sessionId -> navController.navigate(Routes.manageSession(sessionId)) }

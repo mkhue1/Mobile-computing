@@ -50,9 +50,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gamercalendar.data.model.CalendarSession
+import com.example.gamercalendar.data.model.ExternalSession
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.ceil
@@ -85,17 +88,27 @@ private const val TEXT_LINE_GAP = 2f
 
 private const val TITLE_CHAR_WIDTH = 6.6f // average width of one title character in dp, rounded up
 
+// How many all-day phone events are listed under a day's date before the rest collapse into "+N".
+private const val MAX_ALL_DAY_LABELS = 1
+
+private val blockTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+
 @Composable
 internal fun WeekScreen(
     viewModel: WeekViewModel,
     onSelectDate: (LocalDate) -> Unit,
     onSessionClick: (sessionId: String) -> Unit,
+    onVisibleMonthChange: (YearMonth) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val firstDate = uiState.days.first().date
 
     // Open on the week of the selected day, for example when switching in from Month view.
     LaunchedEffect(Unit) { viewModel.showSelectedWeek() }
+
+    // Load the phone's events around the month this week starts in.
+    LaunchedEffect(firstDate) { onVisibleMonthChange(YearMonth.from(firstDate)) }
 
     Column(modifier = modifier) {
         CalendarHeader(
@@ -222,6 +235,20 @@ private fun DayHeader(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         DayNumber(date = day.date, isInRange = true, isSelected = day.isSelected)
+
+        // All-day phone events have no hour to sit at, so they are listed under the date.
+        day.allDayEvents.take(MAX_ALL_DAY_LABELS).forEach { event ->
+            ExternalEventLabel(title = event.title, modifier = Modifier.padding(horizontal = 2.dp))
+        }
+        val hidden = day.allDayEvents.size - MAX_ALL_DAY_LABELS
+        if (hidden > 0) {
+            Text(
+                text = "+$hidden",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -282,19 +309,31 @@ private fun DayColumn(
                 MIN_BLOCK_HEIGHT
             )
 
-            SessionBlock(
-                session = item.session,
-                blockWidth = blockWidth,
-                blockHeight = blockHeight,
-                depth = if (item.cascade) item.column else 0,
-                continuesFromPrevious = item.continuesFromPrevious,
-                continuesToNext = item.continuesToNext,
-                onClick = { onSessionClick(item.session.id) },
-                modifier = Modifier
-                    .offset(x = blockX, y = HOUR_HEIGHT * (item.startMinute / 60f))
-                    .width(blockWidth)
-                    .height(blockHeight)
-            )
+            val blockModifier = Modifier
+                .offset(x = blockX, y = HOUR_HEIGHT * (item.startMinute / 60f))
+                .width(blockWidth)
+                .height(blockHeight)
+
+            when (val entry = item.entry) {
+                is WeekEntry.Game -> SessionBlock(
+                    session = entry.session,
+                    blockWidth = blockWidth,
+                    blockHeight = blockHeight,
+                    depth = if (item.cascade) item.column else 0,
+                    continuesFromPrevious = item.continuesFromPrevious,
+                    continuesToNext = item.continuesToNext,
+                    onClick = { onSessionClick(entry.session.id) },
+                    modifier = blockModifier
+                )
+
+                is WeekEntry.External -> ExternalEventBlock(
+                    event = entry.event,
+                    blockHeight = blockHeight,
+                    continuesFromPrevious = item.continuesFromPrevious,
+                    continuesToNext = item.continuesToNext,
+                    modifier = blockModifier
+                )
+            }
         }
 
     }
@@ -381,6 +420,61 @@ private fun SessionBlock(
 
         if (noteLines == 1 && !continuesFromPrevious) {
             note?.let { ContinuationNote(text = it, color = content) }
+        }
+    }
+}
+
+/**
+ * A grey card for an event from the phone's calendar: the title, then its times if there is room.
+ * It isn't one of the app's sessions, so tapping it does nothing.
+ */
+@Composable
+private fun ExternalEventBlock(
+    event: ExternalSession,
+    blockHeight: Dp,
+    continuesFromPrevious: Boolean,
+    continuesToNext: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val corner = 8.dp
+    val shape = RoundedCornerShape(
+        topStart = if (continuesFromPrevious) 0.dp else corner,
+        topEnd = if (continuesFromPrevious) 0.dp else corner,
+        bottomEnd = if (continuesToNext) 0.dp else corner,
+        bottomStart = if (continuesToNext) 0.dp else corner
+    )
+    val content = MaterialTheme.colorScheme.onSurfaceVariant
+    val lineBudget = (
+            (blockHeight.value - 2 * BLOCK_PADDING_V + TEXT_LINE_GAP) / (TEXT_LINE_HEIGHT + TEXT_LINE_GAP)
+            ).toInt().coerceAtLeast(1)
+    val showTimes = lineBudget >= 2
+
+    Column(
+        modifier = modifier
+            .padding(1.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = BLOCK_PADDING_H.dp, vertical = BLOCK_PADDING_V.dp),
+        verticalArrangement = Arrangement.spacedBy(TEXT_LINE_GAP.dp)
+    ) {
+        WordSafeText(
+            text = event.title,
+            fontSize = 12.sp,
+            minFontSize = 9.sp,
+            lineHeight = TEXT_LINE_HEIGHT.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = (if (showTimes) lineBudget - 1 else 1).coerceAtMost(3),
+            color = content
+        )
+        if (showTimes) {
+            Text(
+                text = "${event.startTime.format(blockTimeFormatter)} – ${event.endTime.format(blockTimeFormatter)}",
+                fontSize = 11.sp,
+                lineHeight = TEXT_LINE_HEIGHT.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = content
+            )
         }
     }
 }

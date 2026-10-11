@@ -1,5 +1,6 @@
 package com.example.gamercalendar.ui.feature.search
 
+import android.content.ContentResolver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -84,6 +85,7 @@ class SearchViewModel(private val repository: CalendarRepository) : ViewModel() 
 }
 
 class SearchViewModelFactory(
+    private val contentResolver: ContentResolver,
     private val api: ApiService = ApiClient.api
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
@@ -91,6 +93,6 @@ class SearchViewModelFactory(
         require(modelClass.isAssignableFrom(SearchViewModel::class.java)) {
             "Unknown ViewModel class: ${modelClass.name}"
         }
-        return SearchViewModel(CalendarRepository(api)) as T
+        return SearchViewModel(CalendarRepository(api, contentResolver)) as T
     }
 }
