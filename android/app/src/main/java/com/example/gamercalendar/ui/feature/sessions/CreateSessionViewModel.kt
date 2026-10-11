@@ -24,14 +24,20 @@ import com.example.gamercalendar.ui.navigation.Routes
 import com.example.gamercalendar.util.SessionTime
 import com.example.gamercalendar.util.apiErrorDetail
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import kotlin.collections.emptyList
 
 private const val GAME_SEARCH_DEBOUNCE_MS = 250L
 private const val PLACE_SEARCH_DEBOUNCE_MS = 250L
@@ -108,7 +114,7 @@ data class CreateSessionUiState(
     val isSubmitting: Boolean = false,
     val error: String? = null,
     val savedSession: GamingSession? = null,
-    val overlappingSessions:  List<GeneralSession> = emptyList(),
+    val overlappingSessions:  List<Overlap> = emptyList(),
 
     val isEditing: Boolean = false,
     val isLoadingSession: Boolean = false,
@@ -127,10 +133,9 @@ data class CreateSessionUiState(
         get() = !isEditing
 }
 
-sealed interface GeneralSession
-
-data class Session(val session: GamingSession) : GeneralSession
-data class ExternalSession(val session: ExternalSession) : GeneralSession
+sealed interface Overlap
+data class InternalOverlap(val session: GamingSession) : Overlap
+data class ExternalOverlap(val session: ExternalSession) : Overlap
 
 class CreateSessionViewModel(
     application: Application,
@@ -158,7 +163,21 @@ class CreateSessionViewModel(
     init {
         loadGroups()
         loadExistingSession()
+        watchForOverlaps()
     }
+
+    // opt in so can use debounce!
+    @OptIn(FlowPreview::class)
+    private fun watchForOverlaps() {
+        viewModelScope.launch {
+            _uiState
+                .map { it.form.startEpochMillis to it.form.endEpochMillis }
+                .distinctUntilChanged()
+                .debounce(300)
+                .collectLatest { (start, end) -> loadOverlappingSessions(start, end) }
+        }
+    }
+
 
     fun loadExistingSession() {
         val sessionId = sessionId ?: return
@@ -215,23 +234,21 @@ class CreateSessionViewModel(
         }
     }
 
-    fun loadOverlappingSessions(startMillis: Long, endMillis: Long, excludedCalendarIds: Set<Long> = emptySet()) {
-        viewModelScope.launch {
-            try {
+    /** Gets all overlapping sessions (external + interal) in the given time range.
+     *  suspend function as caller watchForOverlaps() alreadyt starts a coroutine.
+     * */
+    suspend fun loadOverlappingSessions(startMillis: Long, endMillis: Long, excludedCalendarIds: Set<Long> = emptySet()) {
+        try {
 
-                val externalOverlaps: List<ExternalSession> = calendarRepository.getExternalEvents(
-                    startMillis,
-                    endMillis, excludedCalendarIds
-                ).flatMap { it.value }
-
-                val internalOverlaps: List<GamingSession> = repository.getSessionInRange(startMillis, endMillis)
-
-                val overlaps: List<GeneralSession> = (externalOverlaps + internalOverlaps) as List<GeneralSession>
-                _uiState.update { it.copy(overlappingSessions = overlaps) }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(overlappingSessions = emptyList()) }
-            }
-
+            val externalOverlaps: List<ExternalSession> = calendarRepository.getExternalEvents(
+                startMillis,
+                endMillis, excludedCalendarIds
+            ).flatMap { it.value }
+            val internalOverlaps: List<GamingSession> = repository.getSessionInRange(startMillis, endMillis)
+            val overlaps: List<Overlap> = (externalOverlaps.map { ExternalOverlap(it) } + internalOverlaps.map { InternalOverlap(it)  })
+            _uiState.update { it.copy(overlappingSessions = overlaps) }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(overlappingSessions = emptyList()) }
         }
     }
 
