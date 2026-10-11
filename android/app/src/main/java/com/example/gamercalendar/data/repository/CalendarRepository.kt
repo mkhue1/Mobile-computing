@@ -157,8 +157,6 @@ class CalendarRepository(private val api: ApiService, private val contentResolve
                     val start = Instant.ofEpochMilli(beginVal).atZone(zone)
                     val end = Instant.ofEpochMilli(endVal).atZone(zone)
 
-                    // Log fetched instances
-                    Log.i("INFO", "Event: $title, start: $start, end: $end")
                     eventList.add(
                         ExternalSession(
                             id = eventID.toString(),
