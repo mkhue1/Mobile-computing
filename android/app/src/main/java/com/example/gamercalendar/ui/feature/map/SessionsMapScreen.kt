@@ -80,8 +80,9 @@ private val locationPermissions = arrayOf(
  */
 @Composable
 fun SessionsMapScreen(
-    onBack: () -> Unit,
     onSessionClick: (sessionId: String) -> Unit,
+    onBack: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
     viewModel: SessionsMapViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -164,7 +165,7 @@ fun SessionsMapScreen(
         cameraPositionState.animate(update)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
@@ -211,12 +212,14 @@ fun SessionsMapScreen(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
-            ) {
-                TextButton(onClick = onBack) {
-                    Text("Back")
+            if (onBack != null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                ) {
+                    TextButton(onClick = onBack) {
+                        Text("Back")
+                    }
                 }
             }
 

@@ -37,6 +37,7 @@ import com.example.gamercalendar.ui.feature.friends.FriendsHubScreen
 import com.example.gamercalendar.ui.feature.groups.GroupDetailScreen
 import com.example.gamercalendar.geofence.NearbyOpenEvents
 import com.example.gamercalendar.geofence.SessionGeofences
+import com.example.gamercalendar.ui.feature.explore.ExploreScreen
 import com.example.gamercalendar.ui.feature.home.HomeScreen
 import com.example.gamercalendar.ui.feature.map.SessionsMapScreen
 import com.example.gamercalendar.ui.feature.profile.UsersScreen
@@ -71,7 +72,7 @@ fun AppNavigation(
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            // The home switch surfaces a failure when nearby sessions are turned on.
+            // Explore surfaces a failure when nearby sessions are turned on.
         }
     }
 
@@ -79,10 +80,12 @@ fun AppNavigation(
         NearbyOpenEvents.requests.collect { sessionId ->
             NearbyOpenEvents.clear()
             if (sessionId == null) {
-                navController.navigate(Routes.ITEM_1) {
+                navController.navigate(Routes.EXPLORE) {
                     launchSingleTop = true
-                    popUpTo(Routes.ITEM_1) { inclusive = true }
+                    restoreState = true
+                    popUpTo(Routes.ITEM_1) { saveState = true }
                 }
+                navController.popBackStack(Routes.EXPLORE, inclusive = false)
             } else {
                 navController.navigate(Routes.manageSession(sessionId)) {
                     launchSingleTop = true
@@ -98,11 +101,6 @@ fun AppNavigation(
                 onProfileClick = {
                     navController.navigate(Routes.USERS) {
                         launchSingleTop = true
-                        restoreState = true
-
-                        popUpTo(Routes.ITEM_1) {
-                            saveState = true
-                        }
                     }
                 }
             )
@@ -171,9 +169,17 @@ fun AppNavigation(
                     },
                     onSessionClick = { sessionId ->
                         navController.navigate(Routes.manageSession(sessionId))
-                    },
+                    }
+                )
+            }
+
+            composable(Routes.EXPLORE) {
+                ExploreScreen(
                     onMapClick = {
                         navController.navigate(Routes.SESSIONS_MAP)
+                    },
+                    onSessionClick = { sessionId ->
+                        navController.navigate(Routes.manageSession(sessionId))
                     }
                 )
             }
