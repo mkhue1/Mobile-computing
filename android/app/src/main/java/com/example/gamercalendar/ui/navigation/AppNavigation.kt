@@ -155,7 +155,10 @@ fun AppNavigation(
 
             composable(Routes.SESSIONS_MAP) {
                 SessionsMapScreen(
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onSessionClick = { sessionId ->
+                        navController.navigate(Routes.manageSession(sessionId))
+                    }
                 )
             }
 

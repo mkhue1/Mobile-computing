@@ -163,7 +163,11 @@ interface ApiService {
 
     @GET("sessions/public")
     suspend fun searchPublicSessions(
-        @Query("q") query: String? = null
+        @Query("q") query: String? = null,
+        @Query("session_type") sessionType: String? = null,
+        @Query("has_location") hasLocation: Boolean? = null,
+        @Query("include_joined") includeJoined: Boolean? = null,
+        @Query("limit") limit: Int? = null,
     ): List<GamingSession>
 
     @POST("sessions/{sessionId}/join")

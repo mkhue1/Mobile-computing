@@ -12,6 +12,7 @@ import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionParticipant
 import com.example.gamercalendar.data.model.GameSearchResult
+import com.example.gamercalendar.data.model.place
 
 class SessionRepository {
 
@@ -29,6 +30,16 @@ class SessionRepository {
 
     suspend fun searchPublicSessions(query: String): List<GamingSession> {
         return ApiClient.api.searchPublicSessions(query.trim().ifEmpty { null })
+    }
+
+    /** Public in-person sessions that can be placed on a map, including ones the user is already in. */
+    suspend fun getPublicInPersonSessions(): List<GamingSession> {
+        return ApiClient.api.searchPublicSessions(
+            sessionType = "in_person",
+            hasLocation = true,
+            includeJoined = true,
+            limit = 100,
+        ).filter { it.place != null }
     }
 
     suspend fun joinSession(sessionId: String): GamingSession {

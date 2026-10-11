@@ -596,6 +596,42 @@ def test_create_in_person_session_with_place(client, db, make_user, auth_headers
     assert stored.location_lat == GOOD_GAMES["location_lat"]
 
 
+def test_public_in_person_sessions_for_the_map(client, make_user, auth_headers, create_session):
+    organiser = make_user("organiser")
+    placed = create_session(
+        organiser, visibility="public", session_type="in_person", **GOOD_GAMES
+    )
+    create_session(organiser, visibility="public", session_type="online")
+    create_session(
+        organiser, visibility="public", session_type="in_person", location_name="Alex's place"
+    )
+    create_session(
+        organiser, visibility="private", session_type="in_person", **GOOD_GAMES
+    )
+    create_session(
+        organiser, visibility="friends", session_type="in_person", **GOOD_GAMES
+    )
+
+    stranger = client.get(
+        "/sessions/public",
+        params={"session_type": "in_person", "has_location": True, "include_joined": True},
+        headers=auth_headers(make_user("stranger")),
+    )
+    assert stranger.status_code == 200, stranger.text
+    assert [session["id"] for session in stranger.json()] == [placed["id"]]
+
+    # Search hides sessions you have already joined. The map asks to include them.
+    hidden = client.get("/sessions/public", headers=auth_headers(organiser))
+    assert hidden.json() == []
+
+    included = client.get(
+        "/sessions/public",
+        params={"include_joined": True, "session_type": "in_person", "has_location": True},
+        headers=auth_headers(organiser),
+    )
+    assert [session["id"] for session in included.json()] == [placed["id"]]
+
+
 def test_create_in_person_session_with_name_only(make_user, create_session):
     session = create_session(make_user(), session_type="in_person", location_name="Alex's place")
 

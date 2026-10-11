@@ -75,15 +75,19 @@ def search_public_sessions(
         max_length=100,
         description="Matches against the game name or the session title",
     ),
-    limit: int = Query(default=20, ge=1, le=50),
+    session_type: SessionType | None = Query(default=None),
+    has_location: bool = Query(
+        default=False,
+        description="Only sessions with map coordinates",
+    ),
+    include_joined: bool = Query(
+        default=False,
+        description="Include sessions the current user has already joined",
+    ),
+    limit: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Sessions the user is already in are left out, since there is nothing left to join.
-    already_in = select(SessionParticipant.session_id).where(
-        SessionParticipant.user_id == current_user.id
-    )
-
     statement = (
         select(GamingSession)
         .join(Game, Game.id == GamingSession.game_id)
@@ -93,11 +97,27 @@ def search_public_sessions(
             GamingSession.visibility == SessionVisibility.PUBLIC,
             GamingSession.status == SessionStatus.OPEN,
             GamingSession.end_at > func.now(),
-            GamingSession.id.not_in(already_in),
         )
         .order_by(GamingSession.start_at)
         .limit(limit)
     )
+
+    # Search leaves out sessions the user is already in, since there is nothing left to join.
+    # The map asks for them back so a session you organised still appears where it is.
+    if not include_joined:
+        already_in = select(SessionParticipant.session_id).where(
+            SessionParticipant.user_id == current_user.id
+        )
+        statement = statement.where(GamingSession.id.not_in(already_in))
+
+    if session_type is not None:
+        statement = statement.where(GamingSession.session_type == session_type)
+
+    if has_location:
+        statement = statement.where(
+            GamingSession.location_lat.is_not(None),
+            GamingSession.location_lng.is_not(None),
+        )
 
     term = (q or "").strip()
     if term:
