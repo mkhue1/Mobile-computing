@@ -4,7 +4,7 @@ data class User(
     val id: String,
     val username: String,
     val email: String,
-    val steam_linked: Boolean = false
+    val steam_linked: Boolean = false,
     val avatar_updated_at: String? = null
 )
 

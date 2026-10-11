@@ -144,6 +144,8 @@ fun AddFriendScreen(
                         ?: "None of your Steam friends have linked their account yet."
                 )
             }
+        }
+
         SecondaryButton(
             text = "My QR code",
             onClick = { showQrDialog = true },

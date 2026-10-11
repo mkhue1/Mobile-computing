@@ -76,7 +76,7 @@ class AddFriendViewModel : ViewModel() {
                             results = excludeFriends(searchResults),
                             sentTo = outgoing.map { req -> req.receiver_id }.toSet(),
                             pendingFromUserIds = incoming.map { req -> req.sender_id }.toSet(),
-                            steamLinked = steamStatus.linked
+                            steamLinked = steamStatus.linked,
                             currentUserId = me.id,
                             currentUsername = me.username
                         )
@@ -253,6 +253,7 @@ class AddFriendViewModel : ViewModel() {
                         sentTo = it.sentTo + user.id,
                         steamSuggestions = it.steamSuggestions.filter { suggestion ->
                             suggestion.id != user.id
+                        },
                         message = if (fromQr) {
                             "Friend request sent to ${user.username}"
                         } else {
