@@ -11,6 +11,7 @@ import com.example.gamercalendar.data.model.ExternalCalendar
 import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.repository.CalendarRepository
 import com.example.gamercalendar.data.session.CalendarPreferences
+import com.example.gamercalendar.data.session.CurrentUserStore
 import java.io.IOException
 import java.time.LocalDate
 import java.time.YearMonth
@@ -20,6 +21,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -80,7 +83,22 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
     private var calendarsLoaded = false
 
     init {
-        viewModelScope.launch { ensureCalendarsLoaded() }
+        // An Activity-scoped view model outlives logout, so drop one user's data before the next logs in.
+        viewModelScope.launch {
+            CurrentUserStore.user
+                .drop(1)               // ignore the value at creation; only react to changes
+                .filter { it == null } // the user logged out
+                .collect { clearUserData() }
+        }
+    }
+
+    private fun clearUserData() {
+        eventJob?.cancel()
+        _sessionsByDate.value = emptyMap()
+        _externalEvents.value = emptyMap()
+        _uiState.value = CalendarUiState()
+        _selectedDate.value = LocalDate.now()
+        loadedAround = null
     }
 
     fun setViewMode(mode: CalendarViewMode) {
