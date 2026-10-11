@@ -41,7 +41,7 @@ internal fun CalendarPickerDialog(
     onConfirm: (excludedCalendarIds: Set<Long>) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var excluded by remember { mutableStateOf(excludedCalendarIds) }
+    var excluded by remember(excludedCalendarIds) { mutableStateOf(excludedCalendarIds) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

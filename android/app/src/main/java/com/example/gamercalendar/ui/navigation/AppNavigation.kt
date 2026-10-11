@@ -19,7 +19,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gamercalendar.data.repository.UserRepository
 import com.example.gamercalendar.data.session.CurrentUserStore
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.ui.feature.calendar.CalendarScreen
@@ -112,23 +111,23 @@ fun AppNavigation(
             AppBottomBar(
                 currentRoute = currentRoute,
                 onNavigate = { route ->
-                    // Home and Friends always reset to their root; saving/restoring state here would
-                    // bring back screens stacked on top of them, such as Create session or Add friend.
-                    val resetsToRoot = route == Routes.ITEM_1 || route == Routes.FRIENDS_HUB
+                    // Home always opens fresh, restoring it would bring back tabs stacked on top,
+                    // it is never removed from back stack so state is preserved anyway
+                    val keepsState = route != Routes.ITEM_1
 
-                    // If this tab is already underneath the current screen (for example Calendar underneath
-                    // Manage session), go back to it. Its state, such as the selected day, is kept.
-                    val returnedToTab = !resetsToRoot && navController.popBackStack(route, inclusive = false)
+                    navController.navigate(route) {
+                        launchSingleTop = true
+                        restoreState = keepsState
 
-                    if (!returnedToTab) {
-                        navController.navigate(route) {
-                            launchSingleTop = true
-                            restoreState = !resetsToRoot
-
-                            popUpTo(Routes.ITEM_1) {
-                                saveState = !resetsToRoot
-                            }
+                        popUpTo(Routes.ITEM_1) {
+                            saveState = true
                         }
+                    }
+
+                    // A restored tab brings back its whole stack, e.g. Calendar with a Manage session on top.
+                    // Drop back to the tab's own screen, so every tab opens at its root.
+                    if (keepsState) {
+                        navController.popBackStack(route, inclusive = false)
                     }
                 }
             )
@@ -219,7 +218,7 @@ fun AppNavigation(
 
             composable(Routes.ITEM_2) {
                 val calendarViewModel: CalendarViewModel = viewModel(
-                    factory = CalendarViewModelFactory(contentResolver = LocalContext.current.applicationContext.contentResolver)
+                    factory = CalendarViewModelFactory(context = LocalContext.current)
                 )
                 CalendarScreen(
                     viewModel = calendarViewModel,

@@ -3,6 +3,7 @@ from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from pydantic import AwareDatetime
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -78,6 +79,38 @@ def get_sessions(
     )
 
     return db.scalars(statement).all()
+
+
+@router.get(
+    "/range",
+    response_model=list[SessionResponse],
+)
+def get_sessions_in_range(
+    start: AwareDatetime = Query(description="Start of the range, with a timezone"),
+    end: AwareDatetime = Query(description="End of the range, with a timezone"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if end <= start:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="End time must be after start time")
+
+    statement = (
+        select(GamingSession)
+        .join(
+            SessionParticipant,
+            SessionParticipant.session_id == GamingSession.id,
+        )
+        .where(
+            SessionParticipant.user_id == current_user.id,
+            GamingSession.start_at < end,
+            GamingSession.end_at > start,
+            GamingSession.status != SessionStatus.CANCELLED
+        )
+        .order_by(GamingSession.start_at)
+    )
+
+    return db.scalars(statement).all()
+
 
 @router.get(
     "/public",

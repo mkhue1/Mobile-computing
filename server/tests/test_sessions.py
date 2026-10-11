@@ -183,6 +183,119 @@ def test_get_sessions_only_returns_own_sessions(
     assert stranger_sessions == []
 
 
+# --- GET /sessions/range ------------------------------------------------------
+
+
+RANGE_START = datetime(2030, 6, 10, 12, 0, tzinfo=timezone.utc)
+RANGE_END = RANGE_START + timedelta(days=1)
+
+
+def range_params(start=RANGE_START, end=RANGE_END):
+    return {"start": start.isoformat(), "end": end.isoformat()}
+
+
+def create_timed_session(create_session, organiser, title, start_at, end_at):
+    return create_session(
+        organiser, title=title, start_at=start_at.isoformat(), end_at=end_at.isoformat()
+    )
+
+
+def test_get_sessions_in_range_returns_overlapping_sessions(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    hour = timedelta(hours=1)
+    sessions = {
+        "inside": (RANGE_START + hour, RANGE_START + 2 * hour),
+        "starts_before": (RANGE_START - hour, RANGE_START + hour),
+        "ends_after": (RANGE_END - hour, RANGE_END + hour),
+        "covers_range": (RANGE_START - hour, RANGE_END + hour),
+        "before": (RANGE_START - 3 * hour, RANGE_START - 2 * hour),
+        "after": (RANGE_END + 2 * hour, RANGE_END + 3 * hour),
+        "ends_at_start": (RANGE_START - hour, RANGE_START),
+        "starts_at_end": (RANGE_END, RANGE_END + hour),
+    }
+    for title, (start_at, end_at) in sessions.items():
+        create_timed_session(create_session, organiser, title, start_at, end_at)
+
+    response = client.get(
+        "/sessions/range", params=range_params(), headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200
+    # Ordered by start time.
+    assert [s["title"] for s in response.json()] == [
+        "starts_before",
+        "covers_range",
+        "inside",
+        "ends_after",
+    ]
+
+
+def test_get_sessions_in_range_only_returns_own_sessions(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    stranger = make_user("stranger")
+    create_timed_session(
+        create_session,
+        organiser,
+        "public",
+        RANGE_START + timedelta(hours=1),
+        RANGE_START + timedelta(hours=2),
+    )
+
+    response = client.get(
+        "/sessions/range", params=range_params(), headers=auth_headers(stranger)
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_sessions_in_range_includes_joined_sessions(
+    client, auth_headers, invited
+):
+    _, invitee, session, invite = invited
+    accept = client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+    assert accept.status_code == 200, accept.text
+    start_at = datetime.fromisoformat(session["start_at"])
+
+    response = client.get(
+        "/sessions/range",
+        params=range_params(start_at - timedelta(hours=1), start_at + timedelta(hours=1)),
+        headers=auth_headers(invitee),
+    )
+
+    assert [s["id"] for s in response.json()] == [session["id"]]
+
+
+def test_get_sessions_in_range_rejects_end_before_start(client, make_user, auth_headers):
+    response = client.get(
+        "/sessions/range",
+        params=range_params(start=RANGE_END, end=RANGE_START),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 400
+
+
+def test_get_sessions_in_range_rejects_timezone_naive_times(client, make_user, auth_headers):
+    response = client.get(
+        "/sessions/range",
+        params=range_params(
+            start=RANGE_START.replace(tzinfo=None), end=RANGE_END.replace(tzinfo=None)
+        ),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 422
+
+
 # --- GET /sessions/{session_id} -----------------------------------------------
 
 

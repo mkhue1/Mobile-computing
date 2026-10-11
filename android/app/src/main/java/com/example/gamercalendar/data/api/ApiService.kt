@@ -161,6 +161,12 @@ interface ApiService {
     @GET("sessions/")
     suspend fun getSessions(): List<GamingSession>
 
+    @GET("sessions/range")
+    suspend fun getSessionsInRange(
+        @Query("start") start: String,
+        @Query("end") end: String
+    ): List<GamingSession>
+
     @GET("sessions/public")
     suspend fun searchPublicSessions(
         @Query("q") query: String? = null,

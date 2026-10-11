@@ -56,6 +56,7 @@ fun CalendarScreen(
     val viewMode by viewModel.viewMode.collectAsState()
     val calendars by viewModel.calendars.collectAsState()
     val excludedCalendarIds by viewModel.excludedCalendarIds.collectAsState()
+    val sessionsByDate by viewModel.sessionsByDate.collectAsState()
     var showCalendarPicker by remember { mutableStateOf(false) }
 
     // The calendar leaves composition while a session's details are open, so this runs again
@@ -93,7 +94,7 @@ fun CalendarScreen(
         )
         Spacer(Modifier.height(12.dp))
 
-        if (uiState.isLoading) {
+        if (uiState.isLoading && sessionsByDate.isEmpty()) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
         }
