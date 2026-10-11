@@ -37,7 +37,7 @@ internal object NearbyNotifications {
             "${sessions.size} sessions near you"
         }
         val text = if (sessions.size == 1) {
-            "You're within 2 km of this session."
+            "Check out this nearby session."
         } else {
             sessions.take(3).joinToString { it.second }
         }
