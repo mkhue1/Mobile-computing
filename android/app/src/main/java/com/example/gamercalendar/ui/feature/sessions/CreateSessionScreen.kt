@@ -175,6 +175,10 @@ fun CreateSessionScreen(
             )
         }
 
+        if(!uiState.overlappingSessions.isEmpty()){
+            OverlapWarning(uiState.overlappingSessions)
+        }
+
         LabeledSection(label = "Session type") {
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 SessionType.entries.forEachIndexed { index, type ->
@@ -814,7 +818,6 @@ private fun OverlapWarning(overlaps: List<Overlap>) {
 
     Text(
         text = "Overlaps with $count: $named" + if (hidden > 0) " and $hidden more" else "",
-        modifier = Modifier.padding(top = 8.dp),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.error
     )
