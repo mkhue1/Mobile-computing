@@ -19,7 +19,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gamercalendar.data.repository.UserRepository
 import com.example.gamercalendar.data.session.CurrentUserStore
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.ui.feature.calendar.CalendarScreen

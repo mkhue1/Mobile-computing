@@ -11,7 +11,6 @@ import com.example.gamercalendar.data.model.ExternalCalendar
 import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.repository.CalendarRepository
 import com.example.gamercalendar.data.session.CalendarPreferences
-import com.example.gamercalendar.data.session.CurrentUserStore
 import java.io.IOException
 import java.time.LocalDate
 import java.time.YearMonth
@@ -21,9 +20,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -80,25 +76,9 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
     private var loadedAround: YearMonth? = null
     private var requestedMonth: YearMonth? = null // the month the visible view last asked for
     private var eventJob: Job? = null
-    private var calendarsLoaded = false
 
     init {
-        // An Activity-scoped view model outlives logout, so drop one user's data before the next logs in.
-        viewModelScope.launch {
-            CurrentUserStore.user
-                .drop(1)               // ignore the value at creation; only react to changes
-                .filter { it == null } // the user logged out
-                .collect { clearUserData() }
-        }
-    }
-
-    private fun clearUserData() {
-        eventJob?.cancel()
-        _sessionsByDate.value = emptyMap()
-        _externalEvents.value = emptyMap()
-        _uiState.value = CalendarUiState()
-        _selectedDate.value = LocalDate.now()
-        loadedAround = null
+        viewModelScope.launch { loadCalendars() }
     }
 
     fun setViewMode(mode: CalendarViewMode) {
@@ -184,30 +164,17 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
         }
     }
 
-    /**
-     * Prepares calendar pickers state by getting existing calendars and applying
-     * stored calendar preferences.
-     */
-    private suspend fun ensureCalendarsLoaded() {
-        try {
-            _calendars.value = repository.getCalendars()
-            _excludedCalendarIds.value = repository.getExcludedCalendarIds()
-            calendarsLoaded = true
-        } catch (e: SecurityException) {
-            // no calendar permission yet; tried again on the next events load
-        }
-    }
-
-    /** :oads/reloads the phone's calendars */
+    /** :oads/reloads the phone's calendars and which calendars are hidden */
     fun loadCalendars() {
         viewModelScope.launch {
             try {
                 _calendars.value = repository.getCalendars()
+                _excludedCalendarIds.value = repository.getExcludedCalendarIds()
             } catch (e: CancellationException) {
                 throw e // never swallow coroutine cancellation
             } catch (e: SecurityException) {
-                _calendars.value = emptyList() // calendar permission not granted
-            }
+                _calendars.value = emptyList() // calendar permission not granted yet
+            } catch (e: Exception) {}
         }
     }
 
@@ -215,10 +182,13 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
     fun setExcludedCalendars(ids: Set<Long>) {
         if (ids == _excludedCalendarIds.value) return
         _excludedCalendarIds.value = ids
-        viewModelScope.launch {
-            calendarPreferences.setExcludedCalendarIds(ids)
-            loadedAround = null
-            requestedMonth?.let { loadEventsAround(it) } }
+        try {
+            viewModelScope.launch {
+                calendarPreferences.setExcludedCalendarIds(ids)
+                loadedAround = null
+                requestedMonth?.let { loadEventsAround(it) }
+            }
+        } catch (e : Exception) {}
     }
 }
 
