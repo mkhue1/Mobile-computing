@@ -26,6 +26,9 @@ import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.navigation.AppNavigation
 import com.example.gamercalendar.ui.feature.auth.AuthScreen
 import com.example.gamercalendar.ui.theme.GamerCalendarTheme
+import com.example.gamercalendar.firebase.SocialNotificationType
+import com.example.gamercalendar.firebase.SocialOpenEvents
+import com.example.gamercalendar.firebase.SocialOpenRequest
 import com.example.gamercalendar.geofence.NearbyOpenEvents
 import com.example.gamercalendar.geofence.SessionGeofences
 import com.example.gamercalendar.ui.feature.auth.AuthViewModel
@@ -73,6 +76,7 @@ class MainActivity : ComponentActivity() {
 
         handleSteamDeepLink(intent)
         handleNearbyIntent(intent)
+        handleSocialIntent(intent)
         SessionGeofences.install(applicationContext)
 
         if (BuildConfig.GOOGLE_MAPS_API_KEY.isNotBlank() && !Places.isInitialized()) {
@@ -120,6 +124,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleSteamDeepLink(intent)
         handleNearbyIntent(intent)
+        handleSocialIntent(intent)
     }
 
     private fun handleNearbyIntent(intent: Intent?) {
@@ -128,9 +133,22 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(EXTRA_OPEN_NEARBY)
     }
 
+    private fun handleSocialIntent(intent: Intent?) {
+        val type = SocialNotificationType.fromMessageType(intent?.getStringExtra(EXTRA_OPEN_SOCIAL)) ?: return
+        val request = when (type) {
+            SocialNotificationType.SESSION_INVITE ->
+                intent?.getStringExtra(EXTRA_SOCIAL_SESSION_ID)?.let { SocialOpenRequest.SessionInvite(it) }
+            SocialNotificationType.FRIEND_REQUEST -> SocialOpenRequest.FriendRequests
+        }
+        request?.let(SocialOpenEvents::emit)
+        intent?.removeExtra(EXTRA_OPEN_SOCIAL)
+    }
+
     companion object {
         const val EXTRA_OPEN_NEARBY = "open_nearby"
         const val EXTRA_NEARBY_SESSION_ID = "nearby_session_id"
+        const val EXTRA_OPEN_SOCIAL = "open_social"
+        const val EXTRA_SOCIAL_SESSION_ID = "social_session_id"
     }
 
     private fun handleSteamDeepLink(intent: Intent?) {
