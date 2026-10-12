@@ -35,6 +35,8 @@ os.environ.setdefault("PUBLIC_BASE_URL", "http://testserver")
 os.environ.setdefault("STEAM_DEEP_LINK_SUCCESS", "gamercalendar://steam/linked")
 os.environ.setdefault("STEAM_DEEP_LINK_ERROR", "gamercalendar://steam/error")
 os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-bytes-long")
+# Always off in tests, even when .env configures a key, so nothing is ever sent to Firebase.
+os.environ["FIREBASE_CREDENTIALS_PATH"] = ""
 
 import pytest
 from fastapi.testclient import TestClient

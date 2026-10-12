@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from app.schemas.friendship import (
 )
 from app.schemas.user import UserResponse
 from app.security import get_current_user
+from app.services import push
 from app.services.steam import SteamError, get_friend_steam_ids, get_steam_persona_names
 
 
@@ -223,6 +224,7 @@ async def steam_friend_suggestions(
 )
 def send_friend_request(
     body: FriendRequestCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -271,6 +273,13 @@ def send_friend_request(
     db.add(request)
     db.commit()
     db.refresh(request)
+
+    # sent once the response has gone, so a slow or failing Firebase never holds up the request
+    background_tasks.add_task(
+        push.send_to_user,
+        body.receiver_id,
+        push.friend_request_message(request.id, current_user.username),
+    )
     return FriendRequestResponse(
         id=request.id,
         sender_id=request.sender_id,

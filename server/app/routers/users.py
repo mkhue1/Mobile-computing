@@ -2,13 +2,16 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.device_token import DeviceToken
 from app.models.user import User
 from app.models.user_avatar import UserAvatar
+from app.schemas.device_token import DeviceTokenRegister
 from app.schemas.user import UserCreate, UserResponse
 from app.security import get_current_user, hash_password
 
@@ -104,6 +107,47 @@ def create_user(
 
     db.refresh(new_user)
     return new_user
+
+
+@router.put(
+    "/me/device-tokens",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def register_device_token(
+    body: DeviceTokenRegister,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # A token identifies one app install, so if another account registered it on the phone
+    # before, it now belongs to whoever the most recent sign in is.
+    statement = (
+        insert(DeviceToken)
+        .values(token=body.token, user_id=current_user.id)
+        .on_conflict_do_update(
+            index_elements=[DeviceToken.token],
+            set_={"user_id": current_user.id, "updated_at": func.now()},
+        )
+    )
+    db.execute(statement)
+    db.commit()
+
+
+@router.delete(
+    "/me/device-tokens/{token}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_device_token(
+    token: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    db.execute(
+        delete(DeviceToken).where(
+            DeviceToken.token == token,
+            DeviceToken.user_id == current_user.id,
+        )
+    )
+    db.commit()
 
 
 def _detect_image_type(data: bytes) -> str | None:
