@@ -17,9 +17,7 @@ object AuthValidation {
     }
 
     fun isValidPassword(password: String): Boolean {
-        return password.length >= 8 &&
-            letterPattern.containsMatchIn(password) &&
-            digitPattern.containsMatchIn(password)
+        return password.isNotEmpty() && passwordError(password) == null
     }
 
     fun passwordError(password: String): String? {

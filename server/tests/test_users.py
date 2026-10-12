@@ -10,7 +10,7 @@ def user_payload(**overrides):
     payload = {
         "email": "Ada@Example.com",
         "username": "ada",
-        "password": "password1",
+        "password": "violet-harbor-42",
     }
     payload.update(overrides)
     return payload
@@ -30,7 +30,7 @@ def test_create_user(client, db):
 
     stored = db.scalar(select(User).where(User.username == "ada"))
     assert stored is not None
-    assert stored.password != "password1"
+    assert stored.password != "violet-harbor-42"
     assert stored.password.startswith("$2")
 
 
@@ -85,6 +85,17 @@ def test_create_user_rejects_weak_password(client, password):
     response = client.post("/users/", json=user_payload(password=password))
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "password",
+    ["password1", "sunshine99", "Football1!", "qwerty12", "p@ssw0rd", "trustno1", "h0rse123"],
+)
+def test_create_user_rejects_dictionary_password(client, password):
+    response = client.post("/users/", json=user_payload(password=password))
+
+    assert response.status_code == 422
+    assert "common" in response.text.lower()
 
 
 def test_create_user_rejects_invalid_email(client):
