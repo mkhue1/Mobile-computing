@@ -94,11 +94,6 @@ fun CalendarScreen(
         )
         Spacer(Modifier.height(12.dp))
 
-        if (uiState.isLoading && sessionsByDate.isEmpty()) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(12.dp))
-        }
-
         uiState.errorMessage?.let { message ->
             ErrorBanner(message = message, onRetry = viewModel::refresh)
             Spacer(Modifier.height(12.dp))
