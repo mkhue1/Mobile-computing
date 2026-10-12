@@ -1,11 +1,13 @@
 package com.example.gamercalendar.ui.feature.home
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gamercalendar.data.model.GamingSession
 import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionStatus
 import com.example.gamercalendar.data.repository.SessionRepository
+import com.example.gamercalendar.geofence.SessionGeofences
 import com.example.gamercalendar.util.SessionTime
 import com.example.gamercalendar.util.apiErrorDetail
 import kotlinx.coroutines.CancellationException
@@ -37,7 +39,7 @@ data class HomeUiState(
     val error: String? = null
 )
 
-class HomeViewModel : ViewModel() {
+class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = SessionRepository()
 
@@ -62,6 +64,7 @@ class HomeViewModel : ViewModel() {
                     val invites = async { loadInvites() }
                     sessions.await() to invites.await()
                 }
+                SessionGeofences.dropJoined(getApplication(), sessions.map { it.id }.toSet())
                 val now = System.currentTimeMillis()
 
                 val upcoming = sessions

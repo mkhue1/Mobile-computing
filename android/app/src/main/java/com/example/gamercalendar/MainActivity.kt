@@ -24,6 +24,8 @@ import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.navigation.AppNavigation
 import com.example.gamercalendar.ui.feature.auth.AuthScreen
 import com.example.gamercalendar.ui.theme.GamerCalendarTheme
+import com.example.gamercalendar.geofence.NearbyOpenEvents
+import com.example.gamercalendar.geofence.SessionGeofences
 import com.example.gamercalendar.ui.feature.auth.AuthViewModel
 import com.example.gamercalendar.util.SteamLinkEvent
 import com.example.gamercalendar.util.SteamLinkEvents
@@ -61,6 +63,8 @@ class MainActivity : ComponentActivity() {
         }
 
         handleSteamDeepLink(intent)
+        handleNearbyIntent(intent)
+        SessionGeofences.install(applicationContext)
 
         if (BuildConfig.GOOGLE_MAPS_API_KEY.isNotBlank() && !Places.isInitialized()) {
             Places.initializeWithNewPlacesApiEnabled(applicationContext, BuildConfig.GOOGLE_MAPS_API_KEY)
@@ -102,6 +106,18 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleSteamDeepLink(intent)
+        handleNearbyIntent(intent)
+    }
+
+    private fun handleNearbyIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_NEARBY, false) != true) return
+        NearbyOpenEvents.emit(intent.getStringExtra(EXTRA_NEARBY_SESSION_ID))
+        intent.removeExtra(EXTRA_OPEN_NEARBY)
+    }
+
+    companion object {
+        const val EXTRA_OPEN_NEARBY = "open_nearby"
+        const val EXTRA_NEARBY_SESSION_ID = "nearby_session_id"
     }
 
     private fun handleSteamDeepLink(intent: Intent?) {

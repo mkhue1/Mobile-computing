@@ -169,7 +169,15 @@ interface ApiService {
 
     @GET("sessions/public")
     suspend fun searchPublicSessions(
-        @Query("q") query: String? = null
+        @Query("q") query: String? = null,
+        @Query("session_type") sessionType: String? = null,
+        @Query("has_location") hasLocation: Boolean? = null,
+        @Query("include_joined") includeJoined: Boolean? = null,
+        @Query("near_lat") nearLat: Double? = null,
+        @Query("near_lng") nearLng: Double? = null,
+        @Query("radius_km") radiusKm: Double? = null,
+        @Query("within_days") withinDays: Int? = null,
+        @Query("limit") limit: Int? = null,
     ): List<GamingSession>
 
     @POST("sessions/{sessionId}/join")

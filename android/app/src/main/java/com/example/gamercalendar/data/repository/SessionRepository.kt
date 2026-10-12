@@ -12,6 +12,7 @@ import com.example.gamercalendar.data.model.SessionCreate
 import com.example.gamercalendar.data.model.SessionInvite
 import com.example.gamercalendar.data.model.SessionParticipant
 import com.example.gamercalendar.data.model.GameSearchResult
+import com.example.gamercalendar.data.model.place
 import com.example.gamercalendar.util.SessionTime
 
 class SessionRepository {
@@ -30,6 +31,38 @@ class SessionRepository {
 
     suspend fun searchPublicSessions(query: String): List<GamingSession> {
         return ApiClient.api.searchPublicSessions(query.trim().ifEmpty { null })
+    }
+
+    /** Public in-person sessions that can be placed on a map, including ones the user is already in. */
+    suspend fun getPublicInPersonSessions(limit: Int = 100): List<GamingSession> {
+        return ApiClient.api.searchPublicSessions(
+            sessionType = "in_person",
+            hasLocation = true,
+            includeJoined = true,
+            limit = limit,
+        ).filter { it.place != null }
+    }
+
+    /**
+     * Public in-person sessions starting this week, within [radiusKm] of the phone.
+     * Sessions the user has already joined are left out.
+     */
+    suspend fun getSessionsNear(
+        latitude: Double,
+        longitude: Double,
+        radiusKm: Double = 30.0,
+        withinDays: Int = 7,
+    ): List<GamingSession> {
+        return ApiClient.api.searchPublicSessions(
+            sessionType = "in_person",
+            hasLocation = true,
+            includeJoined = false,
+            nearLat = latitude,
+            nearLng = longitude,
+            radiusKm = radiusKm,
+            withinDays = withinDays,
+            limit = 100,
+        ).filter { it.place != null }
     }
 
     suspend fun joinSession(sessionId: String): GamingSession {

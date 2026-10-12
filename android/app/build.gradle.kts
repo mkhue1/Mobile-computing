@@ -110,6 +110,7 @@ dependencies {
 
     // Newer versions (maps-compose 8.4.0+, places 6+) need Kotlin 2.4
     implementation("com.google.maps.android:maps-compose:8.3.1")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("com.google.android.libraries.places:places:5.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
 
