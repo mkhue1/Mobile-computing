@@ -126,6 +126,16 @@ data class CreateSessionUiState(
     val originalStartEpochMillis: Long? = null,
     val originalVisibility: SessionVisibility? = null
 ) {
+    /**
+     * Friends is no longer offered for new sessions, but sessions already saved as Friends
+     * keep it as an option so editing them doesn't silently change who can see them.
+     */
+    val visibilityOptions: List<SessionVisibility>
+        get() = SessionVisibility.entries.filter {
+            it != SessionVisibility.FRIENDS ||
+                (isEditing && originalVisibility == SessionVisibility.FRIENDS)
+        }
+
     /** A session's group is fixed once created, so editing can't move it into or out of a group. */
     fun canSelectVisibility(visibility: SessionVisibility): Boolean = when {
         !isEditing -> true
