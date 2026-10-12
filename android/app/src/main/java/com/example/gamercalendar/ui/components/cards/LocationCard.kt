@@ -17,15 +17,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.gamercalendar.R
 import com.example.gamercalendar.data.model.SessionPlace
+import com.example.gamercalendar.ui.theme.BackgroundDark
 import com.example.gamercalendar.util.openInGoogleMaps
 import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
@@ -91,11 +96,15 @@ fun LocationCard(
 
 @Composable
 private fun PlaceMap(place: SessionPlace, onClick: () -> Unit) {
+    val context = LocalContext.current
     val position = LatLng(place.lat, place.lng)
     val cameraPositionState = remember(position) {
         CameraPositionState(CameraPosition.fromLatLngZoom(position, MAP_ZOOM))
     }
     val markerState = remember(position) { MarkerState(position) }
+    val mapStyle = remember {
+        MapStyleOptions.loadRawResourceStyle(context, R.raw.roundtablemaptheme)
+    }
 
     // Lite mode renders a static image, so the map doesn't fight the screen's scrolling.
     GoogleMap(
@@ -103,7 +112,12 @@ private fun PlaceMap(place: SessionPlace, onClick: () -> Unit) {
             .fillMaxWidth()
             .height(160.dp),
         cameraPositionState = cameraPositionState,
-        googleMapOptionsFactory = { GoogleMapOptions().liteMode(true) },
+        googleMapOptionsFactory = {
+            GoogleMapOptions()
+                .liteMode(true)
+                .backgroundColor(BackgroundDark.toArgb())
+        },
+        properties = MapProperties(mapStyleOptions = mapStyle),
         uiSettings = MapUiSettings(mapToolbarEnabled = false, zoomControlsEnabled = false),
         onMapClick = { onClick() }
     ) {
