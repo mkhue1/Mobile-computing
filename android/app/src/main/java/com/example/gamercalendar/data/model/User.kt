@@ -24,3 +24,8 @@ data class TokenResponse(
     val token_type: String,
     val user: User
 )
+
+/** The phone's Firebase Cloud Messaging (FCM token), allows the server to send push notifications. */
+data class DeviceTokenRegister(
+    val token: String
+)

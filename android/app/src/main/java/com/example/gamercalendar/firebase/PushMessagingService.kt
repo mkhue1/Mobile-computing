@@ -1,8 +1,14 @@
 package com.example.gamercalendar.firebase
 
 import android.util.Log
+import com.example.gamercalendar.data.api.ApiClient
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Receives push messages from Firebase. Expected data: "type", "id", "title", "body" and, for invites, "session_id".
@@ -27,10 +33,19 @@ class PushMessagingService : FirebaseMessagingService() {
         )
     }
 
+    // A service has no lifecycle scope of its own, so it gets one that ends when the service does.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onNewToken(token: String) {
-        // TODO: send the token to the backend once the device token endpoint exists, so the server
-        //  can reach this phone.
-        Log.d(TAG, "New FCM token")
+        // Only possible while the app is running with someone logged in. Otherwise there's no login
+        // to send it with
+        if (!ApiClient.isSignedIn()) return
+        scope.launch { PushTokenRegistration.register(token) }
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
     }
 
     private companion object {

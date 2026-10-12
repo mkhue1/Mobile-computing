@@ -17,6 +17,12 @@ object ApiClient {
         this.sessionManager = sessionManager
     }
 
+    /**
+     * True once the app has started and someone is logged in.
+     * Used to check if user data exists before sending firebase token.
+     */
+    fun isSignedIn(): Boolean = !sessionManager?.peekToken().isNullOrBlank()
+
     private val authInterceptor = Interceptor { chain ->
         val token = sessionManager?.peekToken()
         val request = if (!token.isNullOrBlank()) {

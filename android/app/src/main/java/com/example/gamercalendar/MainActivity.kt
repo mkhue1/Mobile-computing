@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.padding
@@ -16,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.api.ApiClient
 import com.example.gamercalendar.data.repository.AuthRepository
@@ -35,18 +33,11 @@ import com.example.gamercalendar.ui.feature.auth.AuthViewModel
 import com.example.gamercalendar.util.SteamLinkEvent
 import com.example.gamercalendar.util.SteamLinkEvents
 import com.google.android.libraries.places.api.Places
-import com.google.firebase.messaging.FirebaseMessaging
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        lifecycleScope.launch {
-            val token = FirebaseMessaging.getInstance().token.await()
-            Log.d("FCM", "token: $token")
-        }
 
         // TODO: REMOVE LAN PERMISSIONS WHEN WE DEPLOY
         if (

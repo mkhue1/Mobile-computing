@@ -35,6 +35,7 @@ import com.example.gamercalendar.ui.feature.auth.AuthViewModel
 import com.example.gamercalendar.ui.feature.friends.AddFriendScreen
 import com.example.gamercalendar.ui.feature.friends.FriendsHubScreen
 import com.example.gamercalendar.ui.feature.groups.GroupDetailScreen
+import com.example.gamercalendar.firebase.PushTokenRegistration
 import com.example.gamercalendar.firebase.SocialOpenEvents
 import com.example.gamercalendar.firebase.SocialOpenRequest
 import com.example.gamercalendar.geofence.NearbyOpenEvents
@@ -69,6 +70,9 @@ fun AppNavigation(
         } catch (_: Exception) {
             // Keep the default profile icon; screens surface their own errors.
         }
+        // Runs after every login and app launch, so the server always has this phone's current
+        // push token.
+        PushTokenRegistration.register()
         try {
             SessionGeofences.refreshIfEnabled(context)
         } catch (e: CancellationException) {
