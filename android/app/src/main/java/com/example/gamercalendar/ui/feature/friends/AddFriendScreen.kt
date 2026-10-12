@@ -1,7 +1,13 @@
 package com.example.gamercalendar.ui.feature.friends
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.Settings
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +36,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.User
+import com.example.gamercalendar.nfc.NfcAvailability
+import com.example.gamercalendar.nfc.NfcFriendReader
+import com.example.gamercalendar.nfc.NfcFriendSession
+import com.example.gamercalendar.nfc.nfcAvailability
 import com.example.gamercalendar.ui.components.buttons.SecondaryButton
 import com.example.gamercalendar.ui.components.cards.AppCard
 import com.example.gamercalendar.ui.components.dialogs.MyQrCodeDialog
@@ -52,6 +63,8 @@ fun AddFriendScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showQrDialog by remember { mutableStateOf(false) }
+    var showNfcShare by remember { mutableStateOf(false) }
+    var showNfcRead by remember { mutableStateOf(false) }
 
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
         val contents = result.contents
@@ -71,6 +84,30 @@ fun AddFriendScreen(
                 "Camera permission is required to scan QR codes",
                 Toast.LENGTH_SHORT
             ).show()
+        }
+    }
+
+    fun requireNfc(onReady: () -> Unit) {
+        when (context.nfcAvailability()) {
+            NfcAvailability.Unsupported -> {
+                Toast.makeText(
+                    context,
+                    "This phone doesn't have NFC",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            NfcAvailability.Disabled -> {
+                Toast.makeText(
+                    context,
+                    "Turn on NFC to add a friend this way",
+                    Toast.LENGTH_SHORT
+                ).show()
+                try {
+                    context.startActivity(Intent(Settings.ACTION_NFC_SETTINGS))
+                } catch (_: Exception) {
+                }
+            }
+            NfcAvailability.Ready -> onReady()
         }
     }
 
@@ -155,10 +192,22 @@ fun AddFriendScreen(
         SecondaryButton(
             text = "Scan QR code",
             onClick = ::startQrScan,
-            enabled = !uiState.isResolvingQr
+            enabled = !uiState.isResolvingDiscoveredUser
         )
 
-        if (uiState.isResolvingQr) {
+        SecondaryButton(
+            text = "Share with NFC",
+            onClick = { requireNfc { showNfcShare = true } },
+            enabled = uiState.currentUserId != null
+        )
+
+        SecondaryButton(
+            text = "Read with NFC",
+            onClick = { requireNfc { showNfcRead = true } },
+            enabled = !uiState.isResolvingDiscoveredUser
+        )
+
+        if (uiState.isResolvingDiscoveredUser) {
             LoadingIndicator()
         }
 
@@ -222,15 +271,35 @@ fun AddFriendScreen(
         }
     }
 
-    uiState.pendingQrConfirmUser?.let { user ->
+    uiState.currentUserId?.let { userId ->
+        if (showNfcShare) {
+            NfcShareDialog(
+                userId = userId,
+                username = uiState.currentUsername,
+                onDismiss = { showNfcShare = false }
+            )
+        }
+    }
+
+    if (showNfcRead) {
+        NfcReadDialog(
+            onPayload = { raw ->
+                showNfcRead = false
+                viewModel.onNfcPayload(raw)
+            },
+            onDismiss = { showNfcRead = false }
+        )
+    }
+
+    uiState.pendingConfirmUser?.let { user ->
         AlertDialog(
-            onDismissRequest = viewModel::dismissQrConfirm,
+            onDismissRequest = viewModel::dismissDiscoveredFriend,
             title = { Text("Send friend request?") },
             text = {
                 Text("Send a friend request to ${user.username}?")
             },
             confirmButton = {
-                TextButton(onClick = viewModel::confirmQrFriendRequest) {
+                TextButton(onClick = viewModel::confirmDiscoveredFriend) {
                     Text(
                         text = "Send",
                         color = MaterialTheme.colorScheme.primary
@@ -238,12 +307,101 @@ fun AddFriendScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::dismissQrConfirm) {
+                TextButton(onClick = viewModel::dismissDiscoveredFriend) {
                     Text("Cancel")
                 }
             }
         )
     }
+}
+
+@Composable
+private fun NfcShareDialog(
+    userId: String,
+    username: String?,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    DisposableEffect(userId) {
+        val activity = context.findActivity()
+        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        NfcFriendSession.start(userId)
+        onDispose {
+            NfcFriendSession.stop()
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Share with NFC") },
+        text = {
+            Text(
+                buildString {
+                    append("Hold the other phone against this one. On their phone, tap Read with NFC.")
+                    if (!username.isNullOrBlank()) {
+                        append("\n\nSharing as $username.")
+                    }
+                }
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        }
+    )
+}
+
+@Composable
+private fun NfcReadDialog(
+    onPayload: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    DisposableEffect(Unit) {
+        val activity = context.findActivity()
+        val reader = activity?.let { NfcFriendReader(it, readerListener(context, onPayload)) }
+        if (reader?.start() != true) {
+            Toast.makeText(context, "Couldn't start NFC reader", Toast.LENGTH_SHORT).show()
+        }
+        onDispose { reader?.stop() }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Read with NFC") },
+        text = {
+            Text("Hold your phone against theirs. They need Share with NFC open.")
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+private fun readerListener(
+    context: Context,
+    onPayload: (String) -> Unit
+): NfcFriendReader.Listener = object : NfcFriendReader.Listener {
+    override fun onPayload(raw: String) {
+        onPayload(raw)
+    }
+
+    override fun onError(message: String) {
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun Context.findActivity(): Activity? {
+    var current: Context = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
 }
 
 private fun friendQrScanOptions(): ScanOptions =
