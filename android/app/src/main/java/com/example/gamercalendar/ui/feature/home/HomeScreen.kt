@@ -19,6 +19,7 @@ import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(

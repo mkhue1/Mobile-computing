@@ -1,3 +1,5 @@
+import math
+from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -36,6 +38,18 @@ def _require_group_membership(db: Session, group_id: UUID, user_id: UUID) -> Non
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only create sessions for groups you are a member of",
         )
+
+
+def _distance_km(lat: float, lng: float):
+    """Kilometres from a point to a session's coordinates, for the nearby filter."""
+    return 2 * 6371 * func.asin(
+        func.sqrt(
+            func.power(func.sin(func.radians(GamingSession.location_lat - lat) / 2), 2)
+            + func.cos(func.radians(lat))
+            * func.cos(func.radians(GamingSession.location_lat))
+            * func.power(func.sin(func.radians(GamingSession.location_lng - lng) / 2), 2)
+        )
+    )
 
 
 def _require_in_person_location(session_type: SessionType, location_name: str | None) -> None:
@@ -108,15 +122,23 @@ def search_public_sessions(
         max_length=100,
         description="Matches against the game name or the session title",
     ),
-    limit: int = Query(default=20, ge=1, le=50),
+    session_type: SessionType | None = Query(default=None),
+    has_location: bool = Query(
+        default=False,
+        description="Only sessions with map coordinates",
+    ),
+    include_joined: bool = Query(
+        default=False,
+        description="Include sessions the current user has already joined",
+    ),
+    near_lat: float | None = Query(default=None, ge=-90, le=90),
+    near_lng: float | None = Query(default=None, ge=-180, le=180),
+    radius_km: float | None = Query(default=None, gt=0, le=100),
+    within_days: int | None = Query(default=None, ge=1, le=31),
+    limit: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Sessions the user is already in are left out, since there is nothing left to join.
-    already_in = select(SessionParticipant.session_id).where(
-        SessionParticipant.user_id == current_user.id
-    )
-
     statement = (
         select(GamingSession)
         .join(Game, Game.id == GamingSession.game_id)
@@ -126,11 +148,50 @@ def search_public_sessions(
             GamingSession.visibility == SessionVisibility.PUBLIC,
             GamingSession.status == SessionStatus.OPEN,
             GamingSession.end_at > func.now(),
-            GamingSession.id.not_in(already_in),
         )
-        .order_by(GamingSession.start_at)
-        .limit(limit)
     )
+
+    # Search leaves out sessions the user is already in, since there is nothing left to join.
+    # The map asks for them back so a session you organised still appears where it is.
+    if not include_joined:
+        already_in = select(SessionParticipant.session_id).where(
+            SessionParticipant.user_id == current_user.id
+        )
+        statement = statement.where(GamingSession.id.not_in(already_in))
+
+    if session_type is not None:
+        statement = statement.where(GamingSession.session_type == session_type)
+
+    if has_location:
+        statement = statement.where(
+            GamingSession.location_lat.is_not(None),
+            GamingSession.location_lng.is_not(None),
+        )
+
+    if (near_lat is None) != (near_lng is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="near_lat and near_lng must be given together",
+        )
+
+    # Nearby recommendations only care about sessions that start this week, close to the phone.
+    if within_days is not None:
+        statement = statement.where(
+            GamingSession.start_at <= func.now() + timedelta(days=within_days)
+        )
+
+    if near_lat is not None and near_lng is not None:
+        radius = 30.0 if radius_km is None else radius_km
+        lat_delta = radius / 111.0
+        lng_delta = radius / (111.0 * max(math.cos(math.radians(near_lat)), 0.01))
+        distance_km = _distance_km(near_lat, near_lng)
+        statement = statement.where(
+            GamingSession.location_lat.between(near_lat - lat_delta, near_lat + lat_delta),
+            GamingSession.location_lng.between(near_lng - lng_delta, near_lng + lng_delta),
+            distance_km <= radius,
+        ).order_by(distance_km, GamingSession.start_at)
+    else:
+        statement = statement.order_by(GamingSession.start_at)
 
     term = (q or "").strip()
     if term:
@@ -142,7 +203,7 @@ def search_public_sessions(
             )
         )
 
-    return db.scalars(statement).all()
+    return db.scalars(statement.limit(limit)).all()
 
 
 @router.post(

@@ -4,9 +4,11 @@ object Routes {
     const val ITEM_1 = "item1"
     const val ITEM_2 = "item2"
     const val USERS = "users"
+    const val EXPLORE = "explore"
     const val ITEM_4 = "item4"
     const val ITEM_5 = "item5"
     const val CREATE_SESSION = "sessions/create"
+    const val SESSIONS_MAP = "sessions/map"
     const val FRIENDS_HUB = "friends/hub"
     const val ADD_FRIEND = "friends/add"
 
