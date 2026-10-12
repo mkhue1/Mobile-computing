@@ -9,24 +9,27 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -41,12 +44,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.User
@@ -62,6 +68,8 @@ import com.example.gamercalendar.ui.components.layout.SectionTitle
 import com.example.gamercalendar.ui.feature.auth.AuthViewModel
 import com.example.gamercalendar.util.openCustomTab
 import kotlinx.coroutines.launch
+
+private val SteamBlue = Color(0xFF1B2838)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +97,7 @@ fun UsersScreen(
     val storedEmail by authViewModel.email.collectAsStateWithLifecycle()
     var showPhotoSheet by remember { mutableStateOf(false) }
     var showRemoveDialog by remember { mutableStateOf(false) }
+    var showDisconnectDialog by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
 
@@ -123,8 +132,11 @@ fun UsersScreen(
             color = MaterialTheme.colorScheme.onBackground
         )
 
+        // Who you are: avatar, name and email together, centred.
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -135,9 +147,10 @@ fun UsersScreen(
                     if (hasPhoto) showPhotoSheet = true else launchPicker()
                 }
             )
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = user?.username ?: storedUsername.orEmpty(),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
@@ -151,46 +164,38 @@ fun UsersScreen(
             LoadingIndicator()
         }
 
-        Text(
-            text = "Steam account",
-            style = MaterialTheme.typography.titleMedium
-        )
-
-        when {
-            steamState.isLoading -> LoadingIndicator()
-            steamState.linked -> {
-                Text("Connected${steamState.steamId?.let { " ($it)" } ?: ""}")
-                TextButton(onClick = steamViewModel::disconnectSteam) {
-                    Text("Disconnect Steam")
-                }
-            }
-            else -> {
-                Text("Not connected")
-                Button(
-                    onClick = steamViewModel::connectSteam,
-                    enabled = !steamState.isConnecting,
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Text(if (steamState.isConnecting) "Connecting…" else "Connect Steam")
-                }
-            }
-        }
-
-        steamState.message?.let { Text(it) }
-        steamState.error?.let { ErrorText(text = it) }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider()
-        Spacer(modifier = Modifier.height(8.dp))
-
         uiState.error?.let {
             ErrorText(text = it)
         }
 
-        SectionTitle(title = "More options")
-        TextButton(onClick = { /* reserved for future settings */ }) {
-            Text("Settings (coming soon)")
+        SectionTitle(title = "Connected accounts")
+
+        ConnectedAccountRow(
+            name = "Steam",
+            status = when {
+                steamState.isLoading -> "Checking…"
+                steamState.isConnecting -> "Connecting…"
+                steamState.linked -> "Connected"
+                else -> "Not connected"
+            },
+            icon = Icons.Default.SportsEsports,
+            iconBackground = SteamBlue,
+            isLinked = steamState.linked,
+            isBusy = steamState.isLoading || steamState.isConnecting,
+            onConnect = steamViewModel::connectSteam,
+            onDisconnect = { showDisconnectDialog = true }
+        )
+
+        steamState.message?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
+        steamState.error?.let { ErrorText(text = it) }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         DestructiveButton(
             text = "Log out",
@@ -238,6 +243,135 @@ fun UsersScreen(
             onDismiss = { showRemoveDialog = false }
         )
     }
+
+    if (showDisconnectDialog) {
+        ConfirmDialog(
+            title = "Disconnect Steam?",
+            text = "You can connect it again at any time.",
+            confirmLabel = "Disconnect",
+            dismissLabel = "Keep",
+            onConfirm = {
+                showDisconnectDialog = false
+                steamViewModel.disconnectSteam()
+            },
+            onDismiss = { showDisconnectDialog = false }
+        )
+    }
+}
+
+/**
+ * One linked-account row: a coloured icon block on the left, the account name with a small
+ * uppercase status under it, and a round action on the right (+ to connect, − to disconnect).
+ * Add another service later by calling this again with its own name, icon and colour.
+ */
+@Composable
+private fun ConnectedAccountRow(
+    name: String,
+    status: String,
+    icon: ImageVector,
+    iconBackground: Color,
+    isLinked: Boolean,
+    isBusy: Boolean,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            // When not connected the whole row is the connect button.
+            .clickable(enabled = !isLinked && !isBusy, onClick = onConnect),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .background(iconBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(32.dp)
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 16.dp)
+        ) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = status.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Box(
+            modifier = Modifier.padding(end = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                isBusy -> CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+
+                isLinked -> RoundAction(
+                    icon = Icons.Default.Remove,
+                    description = "Disconnect $name",
+                    background = MaterialTheme.colorScheme.onSurface,
+                    tint = MaterialTheme.colorScheme.surface,
+                    onClick = onDisconnect
+                )
+
+                else -> RoundAction(
+                    icon = Icons.Default.Add,
+                    description = "Connect $name",
+                    background = MaterialTheme.colorScheme.primary,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    onClick = onConnect
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoundAction(
+    icon: ImageVector,
+    description: String,
+    background: Color,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(background)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(20.dp)
+        )
+    }
 }
 
 /**
@@ -264,10 +398,13 @@ private fun UsersScreenAvatarButton(
             .semantics { contentDescription = "Change profile photo" }
     ) {
         // The button's description covers it; don't also read out the initial.
+        // The ring in the accent colour lifts the avatar off the dark background.
         UserAvatar(
             user = user,
             size = 96.dp,
-            modifier = Modifier.clearAndSetSemantics {}
+            modifier = Modifier
+                .clearAndSetSemantics {}
+                .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), CircleShape)
         )
 
         Box(
