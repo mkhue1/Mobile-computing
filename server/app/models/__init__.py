@@ -1,3 +1,4 @@
+from app.models.device_token import DeviceToken
 from app.models.friendship import FriendRequest, Friendship
 from app.models.game import Game, UserFavouriteGame
 from app.models.gaming_session import GamingSession, SessionInvite, SessionParticipant

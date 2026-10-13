@@ -1,5 +1,6 @@
 package com.example.gamercalendar.data.api
 
+import com.example.gamercalendar.data.model.DeviceTokenRegister
 import com.example.gamercalendar.data.model.FriendRequestCreate
 import com.example.gamercalendar.data.model.FriendRequestResponse
 import com.example.gamercalendar.data.model.FriendshipResponse
@@ -72,6 +73,16 @@ interface ApiService {
 
     @DELETE("users/me/avatar")
     suspend fun deleteAvatar()
+
+    @PUT("users/me/device-tokens")
+    suspend fun registerDeviceToken(
+        @Body body: DeviceTokenRegister
+    )
+
+    @DELETE("users/me/device-tokens/{token}")
+    suspend fun removeDeviceToken(
+        @Path("token") token: String
+    )
 
     @GET("friends/")
     suspend fun getFriends(): List<User>

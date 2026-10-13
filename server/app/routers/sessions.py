@@ -2,7 +2,7 @@ import math
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query
 from pydantic import AwareDatetime
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from app.models.user_group import UserGroup, UserGroupMember
 from app.schemas.session import LOCATION_FIELDS, InviteAccept, InviteAcitionResponse, InviteCreate, InviteCreateResponse, InviteDecline, InviteResponse, ParticipantResponse, SentInviteResponse, SessionCancelResponse, SessionResponse, SessionCreate, SessionUpdate
 from app.schemas.user import UserResponse
 from app.security import get_current_user
+from app.services import push
 
 
 
@@ -258,6 +259,7 @@ def join_public_session(
 )
 def create_session(
     session: SessionCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -296,6 +298,7 @@ def create_session(
     db.flush()
     db.add(SessionParticipant(session_id = new_session.id, user_id = current_user.id))
     
+    group_invites: list[SessionInvite] = []
     if session.group_id is not None:
         member_ids = db.scalars(
             select(UserGroupMember.user_id).where(
@@ -303,18 +306,36 @@ def create_session(
                 UserGroupMember.user_id != current_user.id,
             )
         ).all()
-        db.add_all(
+        group_invites = [
             SessionInvite(
                 session_id=new_session.id,
                 sender_id=current_user.id,
                 receiver_id=member_id,
             )
             for member_id in member_ids
-        )
+        ]
+        db.add_all(group_invites)
     db.commit()
     db.refresh(new_session)
 
+    _notify_invited(background_tasks, new_session, current_user, group_invites)
     return new_session
+
+
+def _notify_invited(
+    background_tasks: BackgroundTasks,
+    session: GamingSession,
+    sender: User,
+    invites: list[SessionInvite],
+) -> None:
+    """Sends each invitee a push notification once the response has gone."""
+    title = session.title or session.game.name
+    for invite in invites:
+        background_tasks.add_task(
+            push.send_to_user,
+            invite.receiver_id,
+            push.session_invite_message(invite.id, session.id, sender.username, title),
+        )
 
 @router.post(
     "/{session_id}/cancel",
@@ -425,6 +446,7 @@ def _remove_participant(db: Session, session: GamingSession, participant: Sessio
 def create_invite(
     session_id: UUID,
     invite: InviteCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 
@@ -491,18 +513,20 @@ def create_invite(
         existing.responded_at = None
         db.commit()
         db.refresh(existing)
+        _notify_invited(background_tasks, session, current_user, [existing])
         return existing
 
     new_invite = SessionInvite(
         session_id=invite.session_id,
-        sender_id=current_user.id, 
-        receiver_id=invite.receiver_id, 
+        sender_id=current_user.id,
+        receiver_id=invite.receiver_id,
     )
 
     db.add(new_invite)
     db.commit()
     db.refresh(new_invite)
 
+    _notify_invited(background_tasks, session, current_user, [new_invite])
     return new_invite
 
 

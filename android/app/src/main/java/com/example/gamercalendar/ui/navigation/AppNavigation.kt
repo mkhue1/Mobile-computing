@@ -35,6 +35,9 @@ import com.example.gamercalendar.ui.feature.auth.AuthViewModel
 import com.example.gamercalendar.ui.feature.friends.AddFriendScreen
 import com.example.gamercalendar.ui.feature.friends.FriendsHubScreen
 import com.example.gamercalendar.ui.feature.groups.GroupDetailScreen
+import com.example.gamercalendar.firebase.PushTokenRegistration
+import com.example.gamercalendar.firebase.SocialOpenEvents
+import com.example.gamercalendar.firebase.SocialOpenRequest
 import com.example.gamercalendar.geofence.NearbyOpenEvents
 import com.example.gamercalendar.geofence.SessionGeofences
 import com.example.gamercalendar.ui.feature.explore.ExploreScreen
@@ -67,6 +70,9 @@ fun AppNavigation(
         } catch (_: Exception) {
             // Keep the default profile icon; screens surface their own errors.
         }
+        // Runs after every login and app launch, so the server always has this phone's current
+        // push token.
+        PushTokenRegistration.register()
         try {
             SessionGeofences.refreshIfEnabled(context)
         } catch (e: CancellationException) {
@@ -89,6 +95,27 @@ fun AppNavigation(
             } else {
                 navController.navigate(Routes.manageSession(sessionId)) {
                     launchSingleTop = true
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        SocialOpenEvents.requests.collect { request ->
+            SocialOpenEvents.clear()
+            when (request) {
+                is SocialOpenRequest.SessionInvite ->
+                    navController.navigate(Routes.manageSession(request.sessionId)) {
+                        launchSingleTop = true
+                    }
+                SocialOpenRequest.FriendRequests -> {
+                    // the same way the bottom bar opens the Friends tab
+                    navController.navigate(Routes.FRIENDS_HUB) {
+                        launchSingleTop = true
+                        restoreState = true
+                        popUpTo(Routes.ITEM_1) { saveState = true }
+                    }
+                    navController.popBackStack(Routes.FRIENDS_HUB, inclusive = false)
                 }
             }
         }
