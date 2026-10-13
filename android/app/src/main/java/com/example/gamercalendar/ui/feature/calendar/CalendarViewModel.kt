@@ -96,38 +96,51 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
     /** Loads both gaming sessions and the phone's calendar events for a given month and the months either side of it. **/
     fun loadAround(month: YearMonth) {
         requestedMonth = month
-        // don't load data again if it's the currently loaded set
         if (month == loadedAround) {
             return
         }
+        loadedAround = month
+
         val zone = ZoneId.systemDefault()
         val start = month.minusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()   // 1st of previous month
         val end = month.plusMonths(2).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
 
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            try {
-                val sessions = repository.getMySessionsInRange(start, end)
-                val externalEvents = repository.getExternalEvents(start, end)
-                _sessionsByDate.value = sessions.groupBy { it.date }
-                _externalEvents.value = externalEvents
+            launch {
+                _uiState.update { it.copy(errorMessage = null) }
+                try {
+                    val sessions = repository.getMySessionsInRange(start, end)
+                    _sessionsByDate.value = sessions.groupBy { it.date }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    loadedAround = null
+                    _uiState.update {
+                        it.copy(errorMessage = e.message ?: "Couldn't load sessions.")
+                    }
 
-            } catch (e: CancellationException) {
-                loadedAround = null
-                throw e // never swallow coroutine cancellation
-            }
-            catch (e: SecurityException) {
-                // calendar permission not granted: show no external events and try again next time
-                _externalEvents.value = emptyMap()
-                loadedAround = null
 
-            }
-            catch (e: Exception) {
-                _uiState.update {
-                    it.copy(errorMessage = e.message ?: "Couldn't load sessions.")
                 }
-                loadedAround = null
+            }
+            launch {
+                try {
+                    val externalEvents = repository.getExternalEvents(start, end)
+                    _externalEvents.value = externalEvents
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: SecurityException) {
+                    // calendar permission not granted: show no external events and try again next time
+                    _externalEvents.value = emptyMap()
+                    loadedAround = null
 
+                } catch (e: Exception) {
+                    _uiState.update {
+                        it.copy(errorMessage = e.message ?: "Couldn't load sessions.")
+                    }
+                    loadedAround = null
+
+                }
             }
         }
 
