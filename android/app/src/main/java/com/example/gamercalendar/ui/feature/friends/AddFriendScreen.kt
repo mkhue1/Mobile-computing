@@ -192,11 +192,9 @@ fun AddFriendScreen(
             !uiState.steamLinked -> {
                 EmptyState(
                     title = "Connect Steam to get suggestions",
-                    message = "Link your Steam account from your profile to see friends already on Roundtable."
+                    message = "Link your Steam account from your profile to see friends already on Roundtable.",
+                    onMessageClick = onOpenProfile
                 )
-                TextButton(onClick = onOpenProfile) {
-                    Text("Open profile")
-                }
             }
             uiState.isLoadingSteamSuggestions -> LoadingIndicator()
             uiState.steamSuggestions.isNotEmpty() -> {
