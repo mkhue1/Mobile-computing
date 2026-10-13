@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.data.model.CalendarSession
+import okhttp3.internal.http2.Header
 import java.time.LocalDate
 
 @Composable
@@ -78,35 +79,46 @@ fun CalendarScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+    )
+    {
+        Row(modifier = modifier
+            .padding(
+                horizontal = 16.dp,
+        )) {
+            ViewModeSelector(
+                selected = viewMode,
+                onSelect = viewModel::setViewMode,
+                onChooseCalendars = {
+                    viewModel.loadCalendars() // pick up calendars added since the list was last read
+                    showCalendarPicker = true
+                }
+            )
+            Spacer(Modifier.height(12.dp))
+
+            uiState.errorMessage?.let { message ->
+                ErrorBanner(message = message, onRetry = viewModel::refresh)
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+
+        Column(modifier = modifier
+            .weight(1f)
             .verticalScroll(rememberScrollState())
             .padding(
-                horizontal = if (viewMode == CalendarViewMode.WEEK) 8.dp else 16.dp,
+                horizontal = 16.dp,
                 vertical = 16.dp
-            )
-    ) {
-        ViewModeSelector(
-            selected = viewMode,
-            onSelect = viewModel::setViewMode,
-            onChooseCalendars = {
-                viewModel.loadCalendars() // pick up calendars added since the list was last read
-                showCalendarPicker = true
+            )) {
+            when (viewMode) {
+                CalendarViewMode.MONTH -> MonthTab(
+                    calendar = viewModel,
+                    onSessionClick = onSessionClick
+                )
+
+                CalendarViewMode.WEEK -> WeekTab(
+                    calendar = viewModel,
+                    onSessionClick = onSessionClick
+                )
             }
-        )
-        Spacer(Modifier.height(12.dp))
-
-        if (uiState.isLoading && sessionsByDate.isEmpty()) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(12.dp))
-        }
-
-        uiState.errorMessage?.let { message ->
-            ErrorBanner(message = message, onRetry = viewModel::refresh)
-            Spacer(Modifier.height(12.dp))
-        }
-
-        when (viewMode) {
-            CalendarViewMode.MONTH -> MonthTab(calendar = viewModel, onSessionClick = onSessionClick)
-            CalendarViewMode.WEEK -> WeekTab(calendar = viewModel, onSessionClick = onSessionClick)
         }
     }
 }
