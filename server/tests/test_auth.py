@@ -11,7 +11,7 @@ def register(client):
         payload = {
             "email": "Ada@Example.com",
             "username": "ada",
-            "password": "password1",
+            "password": "violet-harbor-42",
         }
         payload.update(overrides)
         response = client.post("/users/", json=payload)
@@ -29,7 +29,7 @@ def test_login_with_email(client, register):
 
     response = client.post(
         "/auth/login",
-        json={"identifier": "  ADA@example.com  ", "password": "password1"},
+        json={"identifier": "  ADA@example.com  ", "password": "violet-harbor-42"},
     )
 
     assert response.status_code == 200
@@ -46,7 +46,7 @@ def test_login_with_username(client, register):
 
     response = client.post(
         "/auth/login",
-        json={"identifier": "ada", "password": "password1"},
+        json={"identifier": "ada", "password": "violet-harbor-42"},
     )
 
     assert response.status_code == 200
@@ -58,7 +58,7 @@ def test_login_username_is_case_sensitive(client, register):
 
     response = client.post(
         "/auth/login",
-        json={"identifier": "Ada", "password": "password1"},
+        json={"identifier": "Ada", "password": "violet-harbor-42"},
     )
 
     assert response.status_code == 401
@@ -78,7 +78,7 @@ def test_login_rejects_wrong_password(client, register):
 def test_login_rejects_unknown_user(client):
     response = client.post(
         "/auth/login",
-        json={"identifier": "nobody", "password": "password1"},
+        json={"identifier": "nobody", "password": "violet-harbor-42"},
     )
 
     assert response.status_code == 401
@@ -86,7 +86,7 @@ def test_login_rejects_unknown_user(client):
 
 @pytest.mark.parametrize(
     "payload",
-    [{}, {"identifier": "", "password": "password1"}, {"identifier": "ada", "password": ""}],
+    [{}, {"identifier": "", "password": "violet-harbor-42"}, {"identifier": "ada", "password": ""}],
 )
 def test_login_rejects_missing_credentials(client, payload):
     response = client.post("/auth/login", json=payload)
@@ -101,7 +101,7 @@ def test_me_returns_current_user(client, register):
     user = register()
     login = client.post(
         "/auth/login",
-        json={"identifier": "ada", "password": "password1"},
+        json={"identifier": "ada", "password": "violet-harbor-42"},
     )
 
     response = client.get(

@@ -1,5 +1,8 @@
 package com.example.gamercalendar.util
 
+import org.json.JSONArray
+import org.json.JSONObject
+import org.json.JSONTokener
 import retrofit2.HttpException
 
 /**
@@ -14,12 +17,28 @@ fun apiErrorDetail(e: Exception): String? {
         null
     }
     if (body.isNullOrBlank()) return null
-
-    val detail = Regex("\"detail\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
-    if (!detail.isNullOrBlank()) return detail
-
-    val listDetail = Regex("\"msg\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
-    if (!listDetail.isNullOrBlank()) return listDetail
-
-    return null
+    return apiErrorDetailFromBody(body)
 }
+
+internal fun apiErrorDetailFromBody(body: String): String? {
+    val root = try {
+        JSONTokener(body).nextValue()
+    } catch (_: Exception) {
+        return null
+    }
+    if (root !is JSONObject || !root.has("detail")) return null
+
+    return when (val detail = root.get("detail")) {
+        is String -> detail.takeIf { it.isNotBlank() }
+        is JSONArray -> detail.keys().firstNotNullOfOrNull { index ->
+            when (val item = detail.opt(index)) {
+                is String -> item.takeIf { it.isNotBlank() }
+                is JSONObject -> item.optString("msg").takeIf { it.isNotBlank() }
+                else -> null
+            }
+        }
+        else -> null
+    }
+}
+
+private fun JSONArray.keys(): Iterable<Int> = 0 until length()
