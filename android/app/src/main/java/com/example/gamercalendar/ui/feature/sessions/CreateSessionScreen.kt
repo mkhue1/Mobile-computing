@@ -211,14 +211,15 @@ fun CreateSessionScreen(
 
         LabeledSection(label = "Who can see it") {
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                SessionVisibility.entries.forEachIndexed { index, visibility ->
+                val visibilityOptions = uiState.visibilityOptions
+                visibilityOptions.forEachIndexed { index, visibility ->
                     SegmentedButton(
                         selected = form.visibility == visibility,
                         onClick = { viewModel.updateForm { it.copy(visibility = visibility) } },
                         enabled = uiState.canSelectVisibility(visibility),
                         shape = SegmentedButtonDefaults.itemShape(
                             index = index,
-                            count = SessionVisibility.entries.size
+                            count = visibilityOptions.size
                         ),
                         icon = {}
                     ) {

@@ -35,7 +35,7 @@ class SteamViewModel(
                 when (event) {
                     is SteamLinkEvent.Success -> {
                         _uiState.update {
-                            it.copy(message = "Steam account connected", error = null)
+                            it.copy(message = null, error = null)
                         }
                         refresh()
                     }

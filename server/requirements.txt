@@ -12,3 +12,4 @@ httpx
 requests
 cachetools
 firebase-admin
+zxcvbn

@@ -6,6 +6,7 @@ import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.repository.FriendRepository
 import com.example.gamercalendar.data.repository.SteamRepository
 import com.example.gamercalendar.data.repository.UserRepository
+import com.example.gamercalendar.nfc.NfcFriendPayload
 import com.example.gamercalendar.util.apiErrorDetail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -31,8 +32,8 @@ data class AddFriendUiState(
     val pendingFromUserIds: Set<String> = emptySet(),
     val currentUserId: String? = null,
     val currentUsername: String? = null,
-    val pendingQrConfirmUser: User? = null,
-    val isResolvingQr: Boolean = false,
+    val pendingConfirmUser: User? = null,
+    val isResolvingDiscoveredUser: Boolean = false,
     val isLoading: Boolean = false,
     val isSearching: Boolean = false,
     val isLoadingSteamSuggestions: Boolean = false,
@@ -183,11 +184,35 @@ class AddFriendViewModel : ViewModel() {
             }
             return
         }
+        resolveDiscoveredUser(userId, DiscoverySource.Qr)
+    }
 
+    fun onNfcPayload(rawContent: String) {
+        val userId = NfcFriendPayload.parse(rawContent)
+        if (userId == null) {
+            _uiState.update {
+                it.copy(error = "That NFC tap isn't a Roundtable profile")
+            }
+            return
+        }
+        resolveDiscoveredUser(userId, DiscoverySource.Nfc)
+    }
+
+    fun confirmDiscoveredFriend() {
+        val user = _uiState.value.pendingConfirmUser ?: return
+        _uiState.update { it.copy(pendingConfirmUser = null) }
+        sendRequest(user, announceSent = true)
+    }
+
+    fun dismissDiscoveredFriend() {
+        _uiState.update { it.copy(pendingConfirmUser = null) }
+    }
+
+    private fun resolveDiscoveredUser(userId: String, source: DiscoverySource) {
         val state = _uiState.value
         when (userId) {
             state.currentUserId -> {
-                _uiState.update { it.copy(error = "That's your own QR code") }
+                _uiState.update { it.copy(error = source.ownError) }
                 return
             }
             in friendIds -> {
@@ -208,20 +233,20 @@ class AddFriendViewModel : ViewModel() {
 
         viewModelScope.launch {
             _uiState.update {
-                it.copy(isResolvingQr = true, error = null, pendingQrConfirmUser = null)
+                it.copy(isResolvingDiscoveredUser = true, error = null, pendingConfirmUser = null)
             }
             try {
                 val user = userRepository.getUser(userId)
                 _uiState.update {
-                    it.copy(isResolvingQr = false, pendingQrConfirmUser = user)
+                    it.copy(isResolvingDiscoveredUser = false, pendingConfirmUser = user)
                 }
             } catch (e: Exception) {
                 val notFound = e is HttpException && e.code() == 404
                 _uiState.update {
                     it.copy(
-                        isResolvingQr = false,
+                        isResolvingDiscoveredUser = false,
                         error = when {
-                            notFound -> "No Roundtable user matches that QR code"
+                            notFound -> source.missingError
                             else -> apiErrorDetail(e) ?: e.message ?: "Couldn't look up that user"
                         }
                     )
@@ -230,21 +255,11 @@ class AddFriendViewModel : ViewModel() {
         }
     }
 
-    fun confirmQrFriendRequest() {
-        val user = _uiState.value.pendingQrConfirmUser ?: return
-        _uiState.update { it.copy(pendingQrConfirmUser = null) }
-        sendRequest(user, fromQr = true)
-    }
-
-    fun dismissQrConfirm() {
-        _uiState.update { it.copy(pendingQrConfirmUser = null) }
-    }
-
     fun messageShown() {
         _uiState.update { it.copy(message = null) }
     }
 
-    fun sendRequest(user: User, fromQr: Boolean = false) {
+    fun sendRequest(user: User, announceSent: Boolean = false) {
         viewModelScope.launch {
             try {
                 friendRepository.sendFriendRequest(user.id)
@@ -254,7 +269,7 @@ class AddFriendViewModel : ViewModel() {
                         steamSuggestions = it.steamSuggestions.filter { suggestion ->
                             suggestion.id != user.id
                         },
-                        message = if (fromQr) {
+                        message = if (announceSent) {
                             "Friend request sent to ${user.username}"
                         } else {
                             it.message
@@ -280,4 +295,18 @@ class AddFriendViewModel : ViewModel() {
             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
         )
     }
+}
+
+private enum class DiscoverySource(
+    val ownError: String,
+    val missingError: String
+) {
+    Qr(
+        ownError = "That's your own QR code",
+        missingError = "No Roundtable user matches that QR code"
+    ),
+    Nfc(
+        ownError = "That's your own NFC profile",
+        missingError = "No Roundtable user matches that NFC profile"
+    )
 }
