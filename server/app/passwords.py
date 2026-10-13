@@ -12,7 +12,6 @@ def password_rejection_message(password: str, user_inputs: list[str] | None = No
         return None
 
     feedback = result["feedback"]
-    print(feedback)
     warning = (feedback.get("warning") or "").strip()
     suggestions = feedback.get("suggestions") or []
     suggestion = suggestions[0].strip() if suggestions else ""
