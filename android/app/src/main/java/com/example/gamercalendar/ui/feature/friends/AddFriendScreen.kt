@@ -145,6 +145,52 @@ fun AddFriendScreen(
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
+        Text(
+            text = "Search by username",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        DefaultTextField(
+            value = uiState.query,
+            onValueChange = viewModel::onQueryChange,
+            label = "Search by username"
+        )
+
+        uiState.error?.let { ErrorText(text = it) }
+
+        when {
+            uiState.isLoading && uiState.results.isEmpty() -> Unit
+
+            uiState.query.trim().length < MIN_QUERY_LENGTH -> {
+                if (uiState.error == null) {
+                    EmptyState(
+                        title = "Search by username to find friends",
+                        message = "Keep typing to see matching users."
+                    )
+                }
+            }
+
+            uiState.isSearching -> LoadingIndicator()
+
+            uiState.results.isEmpty() -> {
+                if (uiState.error == null) {
+                    EmptyState(
+                        title = "No users found",
+                        message = "Try a different username."
+                    )
+                }
+            }
+
+            else -> uiState.results.forEach { user ->
+                AddFriendRow(
+                    user = user,
+                    isPendingFromThem = user.id in uiState.pendingFromUserIds,
+                    isSent = user.id in uiState.sentTo,
+                    onAddClick = { viewModel.sendRequest(user) }
+                )
+            }
+        }
 
         Text(
             text = "Suggested from Steam",
@@ -211,54 +257,8 @@ fun AddFriendScreen(
             LoadingIndicator()
         }
 
-        Text(
-            text = "Search by username",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        DefaultTextField(
-            value = uiState.query,
-            onValueChange = viewModel::onQueryChange,
-            label = "Search by username"
-        )
-
-        uiState.error?.let { ErrorText(text = it) }
-
-        when {
-            uiState.isLoading && uiState.results.isEmpty() -> Unit
-
-            uiState.query.trim().length < MIN_QUERY_LENGTH -> {
-                if (uiState.error == null) {
-                    EmptyState(
-                        title = "Search by username to find friends",
-                        message = "Keep typing to see matching users."
-                    )
-                }
-            }
-
-            uiState.isSearching -> LoadingIndicator()
-
-            uiState.results.isEmpty() -> {
-                if (uiState.error == null) {
-                    EmptyState(
-                        title = "No users found",
-                        message = "Try a different username."
-                    )
-                }
-            }
-
-            else -> uiState.results.forEach { user ->
-                AddFriendRow(
-                    user = user,
-                    isPendingFromThem = user.id in uiState.pendingFromUserIds,
-                    isSent = user.id in uiState.sentTo,
-                    onAddClick = { viewModel.sendRequest(user) }
-                )
-            }
-        }
-
         SecondaryButton(text = "Done", onClick = onDone)
+
     }
 
     uiState.currentUserId?.let { userId ->
