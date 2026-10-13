@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import kotlin.collections.groupBy
 
 /** Which calendar view is showing. */
 enum class CalendarViewMode(val label: String) {
@@ -91,77 +92,43 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
 
     /** Call again after creating, cancelling or leaving a session so the calendar stays current. */
     fun refresh() {
-        loadSessions()
-        // the views ask for their month again when they appear, which reloads the external events
         loadedAround = null
     }
 
-    private fun loadSessions() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            try {
-                val sessions = repository.getMySessions()
-                _sessionsByDate.value = sessions.groupBy { it.date }
-                _uiState.update { it.copy(isLoading = false) }
-            } catch (e: CancellationException) {
-                throw e // never swallow coroutine cancellation
-            } catch (e: HttpException) {
-                val message = if (e.code() == 401) {
-                    "Your login has expired. Please log in again."
-                } else {
-                    "Server error (${e.code()}). Please try again."
-                }
-                _uiState.update { it.copy(isLoading = false, errorMessage = message) }
-            } catch (e: IOException) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Can't reach the server. Check your connection."
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = e.message ?: "Couldn't load sessions."
-                    )
-                }
-            }
-        }
-    }
-
-    /** Loads the phone's calendar events for a given month and the months either side of it. **/
-    fun loadEventsAround(month: YearMonth) {
+    /** Loads both gaming sessions and the phone's calendar events for a given month and the months either side of it. **/
+    fun loadAround(month: YearMonth) {
         requestedMonth = month
         // don't load data again if it's the currently loaded set
         if (month == loadedAround) {
             return
         }
         val zone = ZoneId.systemDefault()
-        val start = month.minusMonths(1).atDay(1).atStartOfDay(zone)   // 1st of previous month
-        val end = month.plusMonths(2).atDay(1).atStartOfDay(zone)      // 1st of the month after next
-        loadExternalEvents(start.toInstant().toEpochMilli(), end.toInstant().toEpochMilli())
-        loadedAround = month
-    }
+        val start = month.minusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()   // 1st of previous month
+        val end = month.plusMonths(2).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
 
-    private fun loadExternalEvents(startMillis: Long, endMillis: Long) {
         eventJob?.cancel()
         eventJob = viewModelScope.launch {
             try {
-                _externalEvents.value = repository.getExternalEvents(startMillis, endMillis)
+                val sessions = repository.getMySessionsInRange(start, end)
+                val externalEvents = repository.getExternalEvents(start, end)
+                _sessionsByDate.value = sessions.groupBy { it.date }
+                _externalEvents.value = externalEvents
+
             } catch (e: CancellationException) {
                 throw e // never swallow coroutine cancellation
-            } catch (e: SecurityException) {
+            }
+            catch (e: SecurityException) {
                 // calendar permission not granted: show no external events and try again next time
-                loadedAround = null
                 _externalEvents.value = emptyMap()
-            } catch (e: Exception) {
+            }
+            catch (e: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = e.message ?: "Couldn't load external events.")
+                    it.copy(errorMessage = e.message ?: "Couldn't load sessions.")
                 }
-                loadedAround = null
             }
         }
+
+        loadedAround = month
     }
 
     /** :oads/reloads the phone's calendars and which calendars are hidden */
@@ -186,7 +153,7 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
             viewModelScope.launch {
                 calendarPreferences.setExcludedCalendarIds(ids)
                 loadedAround = null
-                requestedMonth?.let { loadEventsAround(it) }
+                requestedMonth?.let { loadAround(it) }
             }
         } catch (e : Exception) {}
     }

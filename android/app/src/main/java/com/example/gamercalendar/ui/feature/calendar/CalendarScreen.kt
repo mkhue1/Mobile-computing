@@ -135,7 +135,7 @@ private fun MonthTab(
         viewModel = monthViewModel,
         onSelectDate = calendar::selectDate,
         onSessionClick = onSessionClick,
-        onVisibleMonthChange = calendar::loadEventsAround
+        onVisibleMonthChange = calendar::loadAround
     )
 }
 
@@ -149,7 +149,7 @@ private fun WeekTab(
         viewModel = weekViewModel,
         onSelectDate = calendar::selectDate,
         onSessionClick = onSessionClick,
-        onVisibleMonthChange = calendar::loadEventsAround
+        onVisibleMonthChange = calendar::loadAround
     )
 }
 

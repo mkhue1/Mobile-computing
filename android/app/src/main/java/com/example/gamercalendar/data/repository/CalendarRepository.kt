@@ -5,6 +5,7 @@ import android.content.ContentUris
 import android.net.Uri
 import android.provider.CalendarContract
 import android.util.Log
+import com.example.gamercalendar.data.api.ApiClient
 import com.example.gamercalendar.data.model.SessionStatus
 import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.api.ApiService
@@ -13,6 +14,7 @@ import com.example.gamercalendar.data.model.ExternalCalendar
 import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.model.GamingSession
 import com.example.gamercalendar.data.session.CalendarPreferences
+import com.example.gamercalendar.util.SessionTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -189,6 +191,14 @@ class CalendarRepository(private val api: ApiService, private val contentResolve
                 .sortedWith(compareBy({ it.date }, { it.startTime }))
                 .groupBy { it.date }
         }
+    }
+
+    /** User's sessions in the given time range, used for calendar display */
+    suspend fun getMySessionsInRange(startMillis: Long, endMillis: Long): List<CalendarSession> {
+        val zone = ZoneId.systemDefault()
+        return api.getSessionsInRange(SessionTime.toIsoUtc(startMillis), SessionTime.toIsoUtc(endMillis))
+            .map { it.toCalendarSession(zone) }
+            .sortedWith(compareBy({ it.date }, { it.startTime }))
     }
 
 }
