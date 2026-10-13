@@ -25,6 +25,7 @@ import com.example.gamercalendar.ui.components.cards.SessionCard
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
+import com.example.gamercalendar.ui.feature.sessions.ScanSessionQr
 
 @Composable
 fun SearchScreen(
@@ -63,6 +64,12 @@ fun SearchScreen(
                     }
                 }
             }
+        )
+        Spacer(Modifier.height(12.dp))
+
+        ScanSessionQr(
+            onJoined = onSessionClick,
+            modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(12.dp))
 

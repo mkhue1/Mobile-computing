@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gamercalendar.data.model.SessionStatus
 import com.example.gamercalendar.data.model.SessionType
 import com.example.gamercalendar.data.model.SessionVisibility
 import com.example.gamercalendar.data.model.User
@@ -51,6 +52,7 @@ import com.example.gamercalendar.ui.components.cards.AppCard
 import com.example.gamercalendar.ui.components.cards.LocationCard
 import com.example.gamercalendar.ui.components.cards.SessionCard
 import com.example.gamercalendar.ui.components.dialogs.ConfirmDialog
+import com.example.gamercalendar.ui.components.dialogs.SessionQrCodeDialog
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
@@ -70,6 +72,7 @@ fun ManageSessionScreen(
     val context = LocalContext.current
 
     var showInviteSheet by remember { mutableStateOf(false) }
+    var showSessionQr by remember { mutableStateOf(false) }
     var pendingConfirmation by remember { mutableStateOf<PendingConfirmation?>(null) }
     var pendingRemoval by remember { mutableStateOf<User?>(null) }
 
@@ -191,6 +194,14 @@ fun ManageSessionScreen(
                     ErrorText(text = it)
                 }
 
+                if (session.visibility == SessionVisibility.PUBLIC && session.status == SessionStatus.OPEN) {
+                    SecondaryButton(
+                        text = "Session QR code",
+                        onClick = { showSessionQr = true },
+                        enabled = !uiState.isWorking
+                    )
+                }
+
                 if (!uiState.isCancelled) {
                     if (uiState.isOrganiser) {
                         DefaultButton(
@@ -302,6 +313,17 @@ fun ManageSessionScreen(
         )
 
         null -> Unit
+    }
+
+    val shareableSession = uiState.session?.takeIf {
+        it.visibility == SessionVisibility.PUBLIC && it.status == SessionStatus.OPEN
+    }
+    if (showSessionQr && shareableSession != null) {
+        SessionQrCodeDialog(
+            sessionId = shareableSession.id,
+            sessionName = shareableSession.title?.takeIf { it.isNotBlank() } ?: shareableSession.game.name,
+            onDismiss = { showSessionQr = false }
+        )
     }
 
     pendingRemoval?.let { user ->
