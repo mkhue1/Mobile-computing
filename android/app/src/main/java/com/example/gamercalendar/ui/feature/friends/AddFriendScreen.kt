@@ -163,12 +163,7 @@ fun AddFriendScreen(
             uiState.isLoading && uiState.results.isEmpty() -> Unit
 
             uiState.query.trim().length < MIN_QUERY_LENGTH -> {
-                if (uiState.error == null) {
-                    EmptyState(
-                        title = "Search by username to find friends",
-                        message = "Keep typing to see matching users."
-                    )
-                }
+
             }
 
             uiState.isSearching -> LoadingIndicator()
@@ -192,12 +187,6 @@ fun AddFriendScreen(
             }
         }
 
-        Text(
-            text = "Suggested from Steam",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
         when {
             uiState.isLoading -> LoadingIndicator()
             !uiState.steamLinked -> {
@@ -211,6 +200,11 @@ fun AddFriendScreen(
             }
             uiState.isLoadingSteamSuggestions -> LoadingIndicator()
             uiState.steamSuggestions.isNotEmpty() -> {
+                Text(
+                    text = "Suggested from Steam",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
                 uiState.steamSuggestions.forEach { user ->
                     AddFriendRow(
                         user = user,
