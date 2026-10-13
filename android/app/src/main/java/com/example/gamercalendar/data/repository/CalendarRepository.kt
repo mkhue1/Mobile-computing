@@ -61,17 +61,6 @@ private const val CALENDAR_OWNER_INDEX: Int = 4
 // TODO - potentially update this to import the ApiClient like the other repositories do, rather than feed in ApiService
 class CalendarRepository(private val api: ApiService, private val contentResolver: ContentResolver, private val calendarPreferences: CalendarPreferences? = null) {
 
-    /** Loads the user's sessions, excluding cancel ones, sorted by date and start time. */
-    suspend fun getMySessions(): List<CalendarSession> {
-        val zone = ZoneId.systemDefault()
-        val now = System.currentTimeMillis()
-        return api.getSessions()
-            .filter { it.status != SessionStatus.CANCELLED }
-            .map { it.toCalendarSession(zone) }
-            .filter { it.endEpochMillis > now }
-            .sortedWith(compareBy({ it.date }, { it.startTime }))
-    }
-
     suspend fun searchPublicSessions(query: String): List<CalendarSession> {
         val zone = ZoneId.systemDefault()
         return api.searchPublicSessions(query.trim().ifEmpty { null })

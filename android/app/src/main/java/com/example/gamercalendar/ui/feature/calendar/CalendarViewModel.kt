@@ -11,7 +11,6 @@ import com.example.gamercalendar.data.model.ExternalCalendar
 import com.example.gamercalendar.data.model.ExternalSession
 import com.example.gamercalendar.data.repository.CalendarRepository
 import com.example.gamercalendar.data.session.CalendarPreferences
-import java.io.IOException
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -22,8 +21,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import retrofit2.HttpException
-import kotlin.collections.groupBy
 
 /** Which calendar view is showing. */
 enum class CalendarViewMode(val label: String) {
@@ -76,7 +73,7 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
 
     private var loadedAround: YearMonth? = null
     private var requestedMonth: YearMonth? = null // the month the visible view last asked for
-    private var eventJob: Job? = null
+    private var loadJob: Job? = null
 
     init {
         viewModelScope.launch { loadCalendars() }
@@ -107,8 +104,8 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
         val start = month.minusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()   // 1st of previous month
         val end = month.plusMonths(2).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
 
-        eventJob?.cancel()
-        eventJob = viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             try {
                 val sessions = repository.getMySessionsInRange(start, end)
                 val externalEvents = repository.getExternalEvents(start, end)
