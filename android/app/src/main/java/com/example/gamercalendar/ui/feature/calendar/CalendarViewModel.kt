@@ -93,6 +93,7 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
     /** Call again after creating, cancelling or leaving a session so the calendar stays current. */
     fun refresh() {
         loadedAround = null
+        requestedMonth?.let { loadAround(it) }
     }
 
     /** Loads both gaming sessions and the phone's calendar events for a given month and the months either side of it. **/
@@ -115,16 +116,21 @@ class CalendarViewModel(private val repository: CalendarRepository, private val 
                 _externalEvents.value = externalEvents
 
             } catch (e: CancellationException) {
+                loadedAround = null
                 throw e // never swallow coroutine cancellation
             }
             catch (e: SecurityException) {
                 // calendar permission not granted: show no external events and try again next time
                 _externalEvents.value = emptyMap()
+                loadedAround = null
+
             }
             catch (e: Exception) {
                 _uiState.update {
                     it.copy(errorMessage = e.message ?: "Couldn't load sessions.")
                 }
+                loadedAround = null
+
             }
         }
 
