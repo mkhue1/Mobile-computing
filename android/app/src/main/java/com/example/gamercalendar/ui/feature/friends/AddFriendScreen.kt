@@ -40,6 +40,7 @@ import com.example.gamercalendar.nfc.NfcAvailability
 import com.example.gamercalendar.nfc.NfcFriendReader
 import com.example.gamercalendar.nfc.NfcFriendSession
 import com.example.gamercalendar.nfc.nfcAvailability
+import com.example.gamercalendar.ui.components.buttons.DefaultButton
 import com.example.gamercalendar.ui.components.buttons.SecondaryButton
 import com.example.gamercalendar.ui.components.cards.AppCard
 import com.example.gamercalendar.ui.components.dialogs.MyQrCodeDialog
@@ -249,7 +250,7 @@ fun AddFriendScreen(
             LoadingIndicator()
         }
 
-        SecondaryButton(text = "Done", onClick = onDone)
+        DefaultButton(text = "Done", onClick = onDone)
 
     }
 
