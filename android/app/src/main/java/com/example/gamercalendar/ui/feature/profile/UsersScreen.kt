@@ -23,7 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,8 +43,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gamercalendar.R
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.ui.components.buttons.DefaultButton
 import com.example.gamercalendar.ui.components.buttons.DestructiveButton
@@ -178,7 +180,7 @@ fun UsersScreen(
                 steamState.linked -> "Connected"
                 else -> "Not connected"
             },
-            icon = Icons.Default.SportsEsports,
+            icon = painterResource(R.drawable.ic_steam),
             iconBackground = SteamBlue,
             isLinked = steamState.linked,
             isBusy = steamState.isLoading || steamState.isConnecting,
@@ -268,7 +270,7 @@ fun UsersScreen(
 private fun ConnectedAccountRow(
     name: String,
     status: String,
-    icon: ImageVector,
+    icon: Painter,
     iconBackground: Color,
     isLinked: Boolean,
     isBusy: Boolean,
@@ -292,7 +294,7 @@ private fun ConnectedAccountRow(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = icon,
+                painter = icon,
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(32.dp)
@@ -331,8 +333,8 @@ private fun ConnectedAccountRow(
                 isLinked -> RoundAction(
                     icon = Icons.Default.Remove,
                     description = "Disconnect $name",
-                    background = MaterialTheme.colorScheme.onSurface,
-                    tint = MaterialTheme.colorScheme.surface,
+                    background = MaterialTheme.colorScheme.error,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                     onClick = onDisconnect
                 )
 
