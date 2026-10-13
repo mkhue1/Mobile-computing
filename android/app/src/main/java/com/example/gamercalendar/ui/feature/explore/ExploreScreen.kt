@@ -41,6 +41,7 @@ import com.example.gamercalendar.ui.components.cards.AppCard
 import com.example.gamercalendar.ui.components.cards.SessionCard
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
+import com.example.gamercalendar.ui.feature.sessions.ScanSessionQr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,6 +125,8 @@ fun ExploreScreen(
                 text = "Session map",
                 onClick = onMapClick
             )
+
+            ScanSessionQr(onJoined = onSessionClick)
 
             AppCard {
                 Row(
