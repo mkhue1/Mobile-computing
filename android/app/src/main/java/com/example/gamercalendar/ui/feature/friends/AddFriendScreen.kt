@@ -146,12 +146,6 @@ fun AddFriendScreen(
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
-        Text(
-            text = "Search by username",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
         DefaultTextField(
             value = uiState.query,
             onValueChange = viewModel::onQueryChange,
@@ -221,6 +215,12 @@ fun AddFriendScreen(
                 )
             }
         }
+
+        Text(
+            text = "Other ways to add",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground
+        )
 
         SecondaryButton(
             text = "My QR code",

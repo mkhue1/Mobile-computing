@@ -22,6 +22,7 @@ fun DefaultTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     enabled: Boolean = true,
     isError: Boolean = false,
+    trailingIcon: (@Composable () -> Unit)? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -38,6 +39,7 @@ fun DefaultTextField(
         enabled = enabled,
         singleLine = true,
         isError = isError,
+        trailingIcon = trailingIcon,
         keyboardOptions = KeyboardOptions(
             keyboardType = keyboardType,
         ),
