@@ -19,6 +19,7 @@ from app.services.steam import (
     STEAM_CALLBACK_PATH,
     SteamError,
     build_openid_login_url,
+    get_steam_persona_names,
     verify_openid_assertion,
 )
 
@@ -44,12 +45,21 @@ def _error_redirect(reason: str) -> RedirectResponse:
     "/status",
     response_model=SteamStatusResponse,
 )
-def steam_status(
+async def steam_status(
     current_user: User = Depends(get_current_user),
 ):
+    persona_name = None
+    if current_user.steam_id is not None:
+        try:
+            names = await get_steam_persona_names([current_user.steam_id])
+            persona_name = names.get(current_user.steam_id)
+        except SteamError:
+            persona_name = None
+
     return SteamStatusResponse(
         linked=current_user.steam_id is not None,
         steam_id=current_user.steam_id,
+        persona_name=persona_name,
     )
 
 

@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 data class SteamUiState(
     val linked: Boolean = false,
     val steamId: String? = null,
+    val personaName: String? = null,
     val isLoading: Boolean = false,
     val isConnecting: Boolean = false,
     val authUrl: String? = null,
@@ -61,6 +62,7 @@ class SteamViewModel(
                     it.copy(
                         linked = status.linked,
                         steamId = status.steam_id,
+                        personaName = status.persona_name,
                         isLoading = false,
                         isConnecting = false,
                         authUrl = null
@@ -112,6 +114,7 @@ class SteamViewModel(
                     it.copy(
                         linked = false,
                         steamId = null,
+                        personaName = null,
                         isLoading = false,
                         message = "Steam account disconnected"
                     )

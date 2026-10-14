@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -180,6 +181,7 @@ fun UsersScreen(
                 steamState.linked -> "Connected"
                 else -> "Not connected"
             },
+            detail = steamState.personaName?.takeIf { steamState.linked && it.isNotBlank() },
             icon = painterResource(R.drawable.ic_steam),
             iconBackground = SteamBlue,
             isLinked = steamState.linked,
@@ -264,6 +266,7 @@ fun UsersScreen(
 /**
  * One linked-account row: a coloured icon block on the left, the account name with a small
  * uppercase status under it, and a round action on the right (+ to connect, − to disconnect).
+ * When [detail] is set (for example a linked Steam profile name), it replaces the status line.
  * Add another service later by calling this again with its own name, icon and colour.
  */
 @Composable
@@ -275,7 +278,8 @@ private fun ConnectedAccountRow(
     isLinked: Boolean,
     isBusy: Boolean,
     onConnect: () -> Unit,
-    onDisconnect: () -> Unit
+    onDisconnect: () -> Unit,
+    detail: String? = null
 ) {
     Row(
         modifier = Modifier
@@ -312,12 +316,22 @@ private fun ConnectedAccountRow(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Text(
-                text = status.uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                letterSpacing = 1.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (detail != null) {
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                Text(
+                    text = status.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         Box(
