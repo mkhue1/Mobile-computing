@@ -1353,6 +1353,87 @@ def test_get_invites_only_returns_pending(client, auth_headers, invited):
     assert response.json() == []
 
 
+def test_get_invites_hides_full_sessions(
+    client, make_user, auth_headers, create_session, send_invite
+):
+    organiser = make_user("organiser")
+    joiner = make_user("joiner")
+    waiting = make_user("waiting")
+    session = create_session(organiser, player_limit=2)
+    joiner_invite = send_invite(organiser, session["id"], joiner).json()
+    send_invite(organiser, session["id"], waiting)
+
+    # The joiner takes the last place, so the session is now full.
+    client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": joiner_invite["id"]},
+        headers=auth_headers(joiner),
+    )
+
+    response = client.get("/sessions/invites", headers=auth_headers(waiting))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_invites_shows_full_session_again_when_a_place_frees_up(
+    client, make_user, auth_headers, create_session, send_invite
+):
+    organiser = make_user("organiser")
+    joiner = make_user("joiner")
+    waiting = make_user("waiting")
+    session = create_session(organiser, player_limit=2)
+    joiner_invite = send_invite(organiser, session["id"], joiner).json()
+    waiting_invite = send_invite(organiser, session["id"], waiting).json()
+    client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": joiner_invite["id"]},
+        headers=auth_headers(joiner),
+    )
+
+    client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(joiner))
+
+    response = client.get("/sessions/invites", headers=auth_headers(waiting))
+    assert [i["id"] for i in response.json()] == [waiting_invite["id"]]
+
+
+def test_get_invites_keeps_sessions_without_a_limit(client, auth_headers, invited):
+    _, invitee, _, invite = invited  # the default session has no player limit
+
+    response = client.get("/sessions/invites", headers=auth_headers(invitee))
+
+    assert [i["id"] for i in response.json()] == [invite["id"]]
+
+
+def _move_session(db, session_id, start_at, end_at):
+    """Sessions can't be created in the past through the API, so tests move them directly."""
+    session = db.get(GamingSession, UUID(session_id))
+    session.start_at = start_at
+    session.end_at = end_at
+    db.commit()
+
+
+def test_get_invites_hides_finished_sessions(client, db, auth_headers, invited):
+    _, invitee, session, _ = invited
+    now = datetime.now(timezone.utc)
+    _move_session(db, session["id"], now - timedelta(hours=3), now - timedelta(hours=1))
+
+    response = client.get("/sessions/invites", headers=auth_headers(invitee))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_invites_keeps_sessions_in_progress(client, db, auth_headers, invited):
+    _, invitee, session, invite = invited
+    now = datetime.now(timezone.utc)
+    _move_session(db, session["id"], now - timedelta(hours=1), now + timedelta(hours=1))
+
+    response = client.get("/sessions/invites", headers=auth_headers(invitee))
+
+    assert [i["id"] for i in response.json()] == [invite["id"]]
+
+
 # --- POST /sessions/{session_id}/accept ---------------------------------------
 
 
