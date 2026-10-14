@@ -64,6 +64,8 @@ android {
 
     buildTypes {
         release {
+            // Same key as debug so the Maps key restriction matches and it installs over a debug build.
+            signingConfig = signingConfigs.getByName("debug")
             optimization {
                 enable = false
             }
