@@ -225,7 +225,7 @@ def join_public_session(
     if session is None or session.visibility != SessionVisibility.PUBLIC:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Session {session_id} does not exist")
     if session.status != SessionStatus.OPEN:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session_id} is {session.status.value} and can't be joined")
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Session {session.title} is {session.status.value} and can't be joined")
     if db.get(SessionParticipant, (session_id, current_user.id)) is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="You're already in this session")
     if session.player_limit is not None and session.player_count >= session.player_limit:
@@ -541,7 +541,16 @@ def get_invites(
     
     statement = (
         select(SessionInvite)
-        .where(SessionInvite.receiver_id == current_user.id, SessionInvite.status == InviteStatus.PENDING)
+        .join(GamingSession, GamingSession.id == SessionInvite.session_id)
+        .where(
+            SessionInvite.receiver_id == current_user.id,
+            SessionInvite.status == InviteStatus.PENDING,
+            # Full sessions can't be joined, so its invites are not displayed to users until a place frees up.
+            or_(
+                GamingSession.player_limit.is_(None),
+                GamingSession.player_count < GamingSession.player_limit,
+            ),
+        )
         .order_by(SessionInvite.created_at.desc())
     )
 
