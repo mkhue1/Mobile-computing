@@ -23,11 +23,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -146,18 +148,25 @@ fun ExploreScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(
-                        checked = uiState.nearbyEnabled,
-                        onCheckedChange = { enabled ->
-                            if (enabled) continueEnable[0]() else viewModel.disableNearby()
-                        }
-                    )
+                    val nearbyEnabled = uiState.nearbyEnabled
+                    // A fresh Switch once the setting loads, so it appears in place instead of animating
+                    // over from off. The hidden one before that keeps the card from changing height.
+                    key(nearbyEnabled != null) {
+                        Switch(
+                            checked = nearbyEnabled == true,
+                            onCheckedChange = { enabled ->
+                                if (enabled) continueEnable[0]() else viewModel.disableNearby()
+                            },
+                            enabled = nearbyEnabled != null,
+                            modifier = Modifier.alpha(if (nearbyEnabled == null) 0f else 1f)
+                        )
+                    }
                 }
             }
 
             uiState.nearbyError?.let { ErrorText(text = it) }
 
-            if (uiState.nearbyEnabled && uiState.nearby.isNotEmpty()) {
+            if (uiState.nearbyEnabled == true && uiState.nearby.isNotEmpty()) {
                 Text(
                     text = "Near you",
                     style = MaterialTheme.typography.titleLarge,
