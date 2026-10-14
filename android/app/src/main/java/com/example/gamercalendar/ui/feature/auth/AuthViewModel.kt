@@ -1,12 +1,22 @@
 package com.example.gamercalendar.ui.feature.auth
 
+import android.content.Context
+import androidx.fragment.app.FragmentActivity
+import com.example.gamercalendar.biometric.findFragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.gamercalendar.biometric.BiometricCancelled
+import com.example.gamercalendar.biometric.BiometricCredentialInvalid
+import com.example.gamercalendar.biometric.BiometricLogin
+import com.example.gamercalendar.biometric.BiometricSession
+import com.example.gamercalendar.biometric.BiometricStatus
 import com.example.gamercalendar.data.repository.AuthRepository
+import com.example.gamercalendar.data.session.CurrentUserStore
 import com.example.gamercalendar.data.session.SessionManager
 import com.example.gamercalendar.util.AuthValidation
 import com.example.gamercalendar.util.apiErrorDetail
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,12 +28,19 @@ import retrofit2.HttpException
 data class AuthUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
-    val isCheckingSession: Boolean = false
+    val isCheckingSession: Boolean = false,
+    val biometricStatus: BiometricStatus = BiometricStatus.Unavailable,
+    val biometricEnabled: Boolean = false,
+    val needsUnlock: Boolean = false,
+    val offerBiometricSetup: Boolean = false,
+    val biometricError: String? = null,
+    val biometricBusy: Boolean = false,
 )
 
 class AuthViewModel(
     private val sessionManager: SessionManager,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val biometricLogin: BiometricLogin,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState(isCheckingSession = true))
@@ -44,18 +61,43 @@ class AuthViewModel(
 
     private fun restoreSession() {
         viewModelScope.launch {
+            val status = biometricLogin.status()
             val token = sessionManager.getToken()
             if (token.isNullOrBlank()) {
-                _uiState.value = AuthUiState(isCheckingSession = false)
+                _uiState.value = AuthUiState(
+                    isCheckingSession = false,
+                    biometricEnabled = biometricLogin.hasCredential(),
+                    biometricStatus = status,
+                )
                 return@launch
             }
             try {
                 val user = authRepository.me()
                 sessionManager.saveSession(token, user.username, user.email)
-                _uiState.value = AuthUiState(isCheckingSession = false)
-            } catch (_: Exception) {
+                val enabled = biometricLogin.hasCredential()
+                _uiState.value = AuthUiState(
+                    isCheckingSession = false,
+                    biometricEnabled = enabled,
+                    biometricStatus = status,
+                    needsUnlock = enabled,
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val hadBiometric = biometricLogin.hasCredential()
                 authRepository.logout()
-                _uiState.value = AuthUiState(isCheckingSession = false)
+                val expired = e is HttpException && e.code() == 401
+                if (expired) biometricLogin.disable()
+                _uiState.value = AuthUiState(
+                    isCheckingSession = false,
+                    biometricEnabled = biometricLogin.hasCredential(),
+                    biometricStatus = status,
+                    error = if (expired && hadBiometric) {
+                        "Your login expired. Sign in with your password."
+                    } else {
+                        null
+                    }
+                )
             }
         }
     }
@@ -66,10 +108,12 @@ class AuthViewModel(
             return
         }
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null, biometricError = null)
             try {
-                authRepository.login(identifier.trim(), password)
-                _uiState.value = _uiState.value.copy(isLoading = false)
+                val response = authRepository.login(identifier.trim(), password)
+                finishPasswordLogin(response.user.username)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -104,10 +148,12 @@ class AuthViewModel(
         }
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null, biometricError = null)
             try {
-                authRepository.register(trimmedEmail, trimmedUsername, password)
-                _uiState.value = _uiState.value.copy(isLoading = false)
+                val response = authRepository.register(trimmedEmail, trimmedUsername, password)
+                finishPasswordLogin(response.user.username)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -117,15 +163,203 @@ class AuthViewModel(
         }
     }
 
+    fun refreshBiometricStatus() {
+        if (_uiState.value.isCheckingSession || _uiState.value.biometricBusy) return
+        val status = biometricLogin.status()
+        if (_uiState.value.biometricStatus == status) return
+        _uiState.value = _uiState.value.copy(biometricStatus = status)
+    }
+
+    fun signInWithBiometric(activity: FragmentActivity) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(biometricBusy = true, error = null, biometricError = null)
+            try {
+                val session = biometricLogin.decrypt(activity)
+                sessionManager.saveSession(session.token, session.username, session.email)
+                try {
+                    val user = authRepository.me()
+                    sessionManager.saveSession(session.token, user.username, user.email)
+                    CurrentUserStore.set(user)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: HttpException) {
+                    if (e.code() == 401) {
+                        biometricLogin.disable()
+                        authRepository.logout()
+                        _uiState.value = AuthUiState(
+                            biometricStatus = biometricLogin.status(),
+                            error = "Biometric sign-in expired. Sign in with your password.",
+                        )
+                        return@launch
+                    }
+                } catch (_: Exception) {
+                    // Offline or a transient server error. The saved token is enough to enter.
+                }
+                _uiState.value = AuthUiState(
+                    biometricEnabled = true,
+                    biometricStatus = biometricLogin.status(),
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: BiometricCancelled) {
+                _uiState.value = _uiState.value.copy(biometricBusy = false)
+            } catch (e: BiometricCredentialInvalid) {
+                _uiState.value = _uiState.value.copy(
+                    biometricBusy = false,
+                    biometricEnabled = false,
+                    biometricError = e.message,
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    biometricBusy = false,
+                    biometricError = e.message ?: "Biometric sign-in failed",
+                )
+            }
+        }
+    }
+
+    fun unlockWithBiometric(activity: FragmentActivity) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(biometricBusy = true, biometricError = null)
+            try {
+                val session = biometricLogin.decrypt(activity)
+                val current = sessionManager.readSession()
+                if (current != null && current.username != session.username) {
+                    _uiState.value = _uiState.value.copy(
+                        biometricBusy = false,
+                        biometricError = "Biometric sign-in doesn't match this account. Use your password.",
+                    )
+                    return@launch
+                }
+                if (current == null) {
+                    sessionManager.saveSession(session.token, session.username, session.email)
+                }
+                _uiState.value = _uiState.value.copy(
+                    biometricBusy = false,
+                    needsUnlock = false,
+                    biometricEnabled = true,
+                    biometricError = null,
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: BiometricCancelled) {
+                _uiState.value = _uiState.value.copy(biometricBusy = false)
+            } catch (e: BiometricCredentialInvalid) {
+                _uiState.value = _uiState.value.copy(
+                    biometricBusy = false,
+                    biometricEnabled = false,
+                    needsUnlock = true,
+                    biometricError = e.message,
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    biometricBusy = false,
+                    biometricError = e.message ?: "Biometric sign-in failed",
+                )
+            }
+        }
+    }
+
+    fun runWithBiometricHost(context: Context, block: (FragmentActivity) -> Unit) {
+        val activity = context.findFragmentActivity()
+        if (activity == null) {
+            _uiState.value = _uiState.value.copy(
+                biometricBusy = false,
+                biometricError = "Couldn't start biometric sign-in. Close the app and try again.",
+            )
+            return
+        }
+        block(activity)
+    }
+
+    fun enableBiometric(activity: FragmentActivity) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                offerBiometricSetup = false,
+                biometricError = null,
+                biometricBusy = true,
+            )
+            val current = sessionManager.readSession()
+            if (current == null) {
+                _uiState.value = _uiState.value.copy(
+                    biometricBusy = false,
+                    biometricError = "Log in with your password before enabling biometrics"
+                )
+                return@launch
+            }
+            try {
+                biometricLogin.enable(
+                    activity,
+                    BiometricSession(current.token, current.username, current.email)
+                )
+                _uiState.value = _uiState.value.copy(
+                    biometricBusy = false,
+                    biometricEnabled = true,
+                    biometricStatus = biometricLogin.status(),
+                    offerBiometricSetup = false,
+                    biometricError = null,
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: BiometricCancelled) {
+                _uiState.value = _uiState.value.copy(biometricBusy = false)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    biometricBusy = false,
+                    biometricError = e.message ?: "Couldn't enable biometric sign-in"
+                )
+            }
+        }
+    }
+
+    fun disableBiometric() {
+        viewModelScope.launch {
+            biometricLogin.disable()
+            biometricLogin.setSetupDeclined(true)
+            _uiState.value = _uiState.value.copy(
+                biometricEnabled = false,
+                offerBiometricSetup = false,
+                biometricError = null,
+            )
+        }
+    }
+
+    fun declineBiometricOffer() {
+        viewModelScope.launch {
+            biometricLogin.setSetupDeclined(true)
+            _uiState.value = _uiState.value.copy(offerBiometricSetup = false)
+        }
+    }
+
     fun logout() {
         viewModelScope.launch {
             authRepository.logout()
-            _uiState.value = AuthUiState()
+            _uiState.value = AuthUiState(
+                biometricEnabled = biometricLogin.hasCredential(),
+                biometricStatus = biometricLogin.status(),
+            )
         }
     }
 
     fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
+        _uiState.value = _uiState.value.copy(error = null, biometricError = null)
+    }
+
+    private suspend fun finishPasswordLogin(username: String) {
+        val storedName = biometricLogin.storedUsername()
+        if (biometricLogin.hasCredential() && storedName != null && storedName != username) {
+            biometricLogin.disable()
+            biometricLogin.setSetupDeclined(false)
+        }
+        val enabled = biometricLogin.hasCredential()
+        val status = biometricLogin.status()
+        _uiState.value = AuthUiState(
+            biometricEnabled = enabled,
+            biometricStatus = status,
+            offerBiometricSetup = !enabled &&
+                status == BiometricStatus.Ready &&
+                !biometricLogin.isSetupDeclined(),
+        )
     }
 
     private fun httpErrorMessage(e: Exception, fallback: String): String {
@@ -142,11 +376,12 @@ class AuthViewModel(
 
     class Factory(
         private val sessionManager: SessionManager,
-        private val authRepository: AuthRepository
+        private val authRepository: AuthRepository,
+        private val biometricLogin: BiometricLogin,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return AuthViewModel(sessionManager, authRepository) as T
+            return AuthViewModel(sessionManager, authRepository, biometricLogin) as T
         }
     }
 }

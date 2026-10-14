@@ -17,14 +17,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.gamercalendar.biometric.BiometricStatus
 import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.buttons.DefaultButton
+import com.example.gamercalendar.ui.components.buttons.SecondaryButton
 import com.example.gamercalendar.ui.components.inputs.DefaultTextField
 import com.example.gamercalendar.ui.components.inputs.PasswordTextField
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
@@ -42,6 +45,8 @@ fun AuthScreen(
     var password by remember { mutableStateOf("") }
 
     val passwordHint = AuthValidation.passwordError(password)
+    val context = LocalContext.current
+    val showBiometric = !isSignUp && uiState.biometricEnabled
 
     AppScaffold { innerPadding ->
         ScreenContainer(
@@ -86,6 +91,32 @@ fun AuthScreen(
                         } else {
                             "Sign in to continue"
                         },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (showBiometric && uiState.biometricStatus == BiometricStatus.Ready) {
+                    SecondaryButton(
+                        text = if (uiState.biometricBusy) {
+                            "Waiting for biometrics…"
+                        } else {
+                            "Sign in with biometrics"
+                        },
+                        onClick = {
+                            authViewModel.runWithBiometricHost(context, authViewModel::signInWithBiometric)
+                        },
+                        enabled = !uiState.isLoading && !uiState.biometricBusy
+                    )
+                    Text(
+                        text = "or use your password",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                } else if (showBiometric) {
+                    Text(
+                        text = biometricFallbackMessage(uiState.biometricStatus),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -145,7 +176,7 @@ fun AuthScreen(
                     }
                 }
 
-                uiState.error?.let {
+                (uiState.error ?: uiState.biometricError)?.let {
                     ErrorText(
                         text = it,
                     )

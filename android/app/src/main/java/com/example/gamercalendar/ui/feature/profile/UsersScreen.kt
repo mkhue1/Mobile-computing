@@ -28,6 +28,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ripple
@@ -57,6 +58,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.R
+import com.example.gamercalendar.biometric.BiometricStatus
+import com.example.gamercalendar.ui.feature.auth.biometricFallbackMessage
 import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.ui.components.buttons.DefaultButton
 import com.example.gamercalendar.ui.components.buttons.DestructiveButton
@@ -81,6 +84,7 @@ fun UsersScreen(
     steamViewModel: SteamViewModel = viewModel()
 ) {
     val uiState by userViewModel.uiState.collectAsStateWithLifecycle()
+    val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     val steamState by steamViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
@@ -196,6 +200,57 @@ fun UsersScreen(
             )
         }
         steamState.error?.let { ErrorText(text = it) }
+
+        SectionTitle(title = "Security")
+
+        if (authState.biometricStatus == BiometricStatus.Ready) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "Biometric sign-in",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Use your fingerprint or face to log in. Your password still works.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = authState.biometricEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled) {
+                            authViewModel.runWithBiometricHost(context, authViewModel::enableBiometric)
+                        } else {
+                            authViewModel.disableBiometric()
+                        }
+                    },
+                    enabled = !authState.biometricBusy
+                )
+            }
+        } else {
+            Text(
+                text = biometricFallbackMessage(authState.biometricStatus),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (authState.biometricEnabled) {
+                SecondaryButton(
+                    text = "Turn off biometric sign-in",
+                    onClick = authViewModel::disableBiometric
+                )
+            }
+        }
+
+        authState.biometricError?.let { ErrorText(text = it) }
 
         Spacer(modifier = Modifier.height(8.dp))
 
