@@ -68,8 +68,6 @@ private val DAY_COLUMN_WIDTH = 112.dp
 
 private val TIME_GUTTER_WIDTH = 34.dp
 
-private val TIMELINE_VIEWPORT_HEIGHT = 480.dp
-
 private val MIN_BLOCK_HEIGHT = 24.dp
 
 private val CASCADE_INDENT = 10.dp
@@ -121,7 +119,10 @@ internal fun WeekScreen(
         WeekTimeline(
             state = uiState,
             onSelectDate = onSelectDate,
-            onSessionClick = onSessionClick
+            onSessionClick = onSessionClick,
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = 16.dp)
         )
     }
 }
@@ -134,7 +135,8 @@ internal fun WeekScreen(
 private fun WeekTimeline(
     state: WeekUiState,
     onSelectDate: (LocalDate) -> Unit,
-    onSessionClick: (sessionId: String) -> Unit
+    onSessionClick: (sessionId: String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val verticalState = rememberScrollState()
     // One state drives both the header row and the grid, so they always move together.
@@ -154,7 +156,7 @@ private fun WeekTimeline(
         horizontalState.scrollTo(with(density) { (DAY_COLUMN_WIDTH * index).roundToPx() })
     }
 
-    Column {
+    Column(modifier = modifier) {
         Row(modifier = Modifier.fillMaxWidth()) {
             Spacer(Modifier.width(TIME_GUTTER_WIDTH))
             Row(
@@ -176,7 +178,7 @@ private fun WeekTimeline(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(TIMELINE_VIEWPORT_HEIGHT)
+                .weight(1f)
                 .verticalScroll(verticalState)
         ) {
             HourGutter()

@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -91,31 +93,38 @@ internal fun MonthScreen(
         )
         Spacer(Modifier.height(12.dp))
 
-        WeekdayLabels(weekDays)
-        Spacer(Modifier.height(8.dp))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 16.dp)
+        ) {
+            WeekdayLabels(weekDays)
+            Spacer(Modifier.height(8.dp))
 
-        HorizontalCalendar(
-            state = calendarState,
-            dayContent = { day ->
-                DayCell(
-                    date = day.date,
-                    isInRange = day.position == DayPosition.MonthDate,
-                    isSelected = day.date == uiState.selectedDate,
-                    sessions = uiState.sessionsByDate[day.date].orEmpty(),
-                    events = uiState.eventsByDate[day.date].orEmpty(),
-                    maxLabels = MONTH_MAX_LABELS,
-                    onClick = { onSelectDate(day.date) }
-                )
-            }
-        )
-        Spacer(Modifier.height(16.dp))
+            HorizontalCalendar(
+                state = calendarState,
+                dayContent = { day ->
+                    DayCell(
+                        date = day.date,
+                        isInRange = day.position == DayPosition.MonthDate,
+                        isSelected = day.date == uiState.selectedDate,
+                        sessions = uiState.sessionsByDate[day.date].orEmpty(),
+                        events = uiState.eventsByDate[day.date].orEmpty(),
+                        maxLabels = MONTH_MAX_LABELS,
+                        onClick = { onSelectDate(day.date) }
+                    )
+                }
+            )
+            Spacer(Modifier.height(16.dp))
 
-        SelectedDaySessions(
-            date = uiState.selectedDate,
-            sessions = uiState.selectedDaySessions,
-            events = uiState.selectedDayEvents,
-            onSessionClick = onSessionClick
-        )
+            SelectedDaySessions(
+                date = uiState.selectedDate,
+                sessions = uiState.selectedDaySessions,
+                events = uiState.selectedDayEvents,
+                onSessionClick = onSessionClick
+            )
+        }
     }
 }
 
