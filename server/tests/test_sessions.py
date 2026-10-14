@@ -1405,6 +1405,35 @@ def test_get_invites_keeps_sessions_without_a_limit(client, auth_headers, invite
     assert [i["id"] for i in response.json()] == [invite["id"]]
 
 
+def _move_session(db, session_id, start_at, end_at):
+    """Sessions can't be created in the past through the API, so tests move them directly."""
+    session = db.get(GamingSession, UUID(session_id))
+    session.start_at = start_at
+    session.end_at = end_at
+    db.commit()
+
+
+def test_get_invites_hides_finished_sessions(client, db, auth_headers, invited):
+    _, invitee, session, _ = invited
+    now = datetime.now(timezone.utc)
+    _move_session(db, session["id"], now - timedelta(hours=3), now - timedelta(hours=1))
+
+    response = client.get("/sessions/invites", headers=auth_headers(invitee))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_invites_keeps_sessions_in_progress(client, db, auth_headers, invited):
+    _, invitee, session, invite = invited
+    now = datetime.now(timezone.utc)
+    _move_session(db, session["id"], now - timedelta(hours=1), now + timedelta(hours=1))
+
+    response = client.get("/sessions/invites", headers=auth_headers(invitee))
+
+    assert [i["id"] for i in response.json()] == [invite["id"]]
+
+
 # --- POST /sessions/{session_id}/accept ---------------------------------------
 
 

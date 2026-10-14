@@ -550,6 +550,8 @@ def get_invites(
                 GamingSession.player_limit.is_(None),
                 GamingSession.player_count < GamingSession.player_limit,
             ),
+            # An invite to a session that has already finished should not be displayed either.
+            GamingSession.end_at > func.now(),
         )
         .order_by(SessionInvite.created_at.desc())
     )
