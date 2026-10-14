@@ -62,7 +62,7 @@
   {
     "featureType": "road",
     "elementType": "geometry.fill",
-    "stylers": [{ "color": "#11172a" }]
+    "stylers": [{ "color": "#1f2742" }]
   },
   {
     "featureType": "road",
@@ -72,12 +72,12 @@
   {
     "featureType": "road.arterial",
     "elementType": "geometry",
-    "stylers": [{ "color": "#161d34" }]
+    "stylers": [{ "color": "#2a3354" }]
   },
   {
     "featureType": "road.highway",
     "elementType": "geometry",
-    "stylers": [{ "color": "#241c45" }]
+    "stylers": [{ "color": "#33276a" }]
   },
   {
     "featureType": "road.highway",
