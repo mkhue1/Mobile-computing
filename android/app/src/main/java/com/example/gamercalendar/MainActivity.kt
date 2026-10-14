@@ -8,8 +8,10 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.fragment.app.FragmentActivity
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -18,14 +20,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gamercalendar.biometric.BiometricLogin
 import com.example.gamercalendar.data.api.ApiClient
 import com.example.gamercalendar.data.repository.AuthRepository
 import com.example.gamercalendar.data.session.SessionManager
-import com.example.gamercalendar.ui.components.app.AppScaffold
-import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.navigation.AppNavigation
 import com.example.gamercalendar.ui.feature.auth.AuthScreen
 import com.example.gamercalendar.ui.feature.auth.BiometricSetupDialog
@@ -44,6 +45,7 @@ import com.google.android.libraries.places.api.Places
 class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
         if (savedInstanceState == null) {
@@ -64,10 +66,11 @@ class MainActivity : FragmentActivity() {
         val authRepository = AuthRepository(sessionManager)
         val biometricLogin = BiometricLogin(applicationContext)
         val authFactory = AuthViewModel.Factory(sessionManager, authRepository, biometricLogin)
+        val authViewModel = ViewModelProvider(this, authFactory)[AuthViewModel::class.java]
+        splashScreen.setKeepOnScreenCondition { authViewModel.uiState.value.isCheckingSession }
 
         setContent {
             GamerCalendarTheme {
-                val authViewModel: AuthViewModel = viewModel(factory = authFactory)
                 val uiState by authViewModel.uiState.collectAsStateWithLifecycle()
                 val token by authViewModel.accessToken.collectAsStateWithLifecycle()
                 val lifecycleOwner = LocalLifecycleOwner.current
@@ -84,13 +87,11 @@ class MainActivity : FragmentActivity() {
 
                 when {
                     uiState.isCheckingSession -> {
-                        AppScaffold { innerPadding ->
-                            ScreenContainer(
-                                modifier = Modifier.padding(innerPadding)
-                            ) {
-                                Text("Loading…")
-                            }
-                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background)
+                        )
                     }
                     uiState.needsUnlock -> {
                         BiometricUnlockScreen(authViewModel = authViewModel)
