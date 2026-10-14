@@ -1,5 +1,6 @@
 package com.example.gamercalendar.ui.components.feedback
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,7 +20,8 @@ import androidx.compose.ui.unit.dp
 fun EmptyState(
     title: String,
     message: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onMessageClick: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -38,8 +40,11 @@ fun EmptyState(
         Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
+            color = if (onMessageClick != null) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = if (onMessageClick != null) Modifier.clickable(onClick = onMessageClick)
+            else Modifier,
+            textAlign = TextAlign.Center,
         )
     }
 }

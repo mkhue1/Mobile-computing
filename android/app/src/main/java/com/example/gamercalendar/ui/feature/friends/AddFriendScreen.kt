@@ -40,6 +40,7 @@ import com.example.gamercalendar.nfc.NfcAvailability
 import com.example.gamercalendar.nfc.NfcFriendReader
 import com.example.gamercalendar.nfc.NfcFriendSession
 import com.example.gamercalendar.nfc.nfcAvailability
+import com.example.gamercalendar.ui.components.buttons.DefaultButton
 import com.example.gamercalendar.ui.components.buttons.SecondaryButton
 import com.example.gamercalendar.ui.components.cards.AppCard
 import com.example.gamercalendar.ui.components.dialogs.MyQrCodeDialog
@@ -145,26 +146,64 @@ fun AddFriendScreen(
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
-
         Text(
-            text = "Suggested from Steam",
+            text = "Search by username",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
+
+        DefaultTextField(
+            value = uiState.query,
+            onValueChange = viewModel::onQueryChange,
+            label = "Search by username"
+        )
+
+        uiState.error?.let { ErrorText(text = it) }
+
+        when {
+            uiState.isLoading && uiState.results.isEmpty() -> Unit
+
+            uiState.query.trim().length < MIN_QUERY_LENGTH -> {
+
+            }
+
+            uiState.isSearching -> LoadingIndicator()
+
+            uiState.results.isEmpty() -> {
+                if (uiState.error == null) {
+                    EmptyState(
+                        title = "No users found",
+                        message = "Try a different username."
+                    )
+                }
+            }
+
+            else -> uiState.results.forEach { user ->
+                AddFriendRow(
+                    user = user,
+                    isPendingFromThem = user.id in uiState.pendingFromUserIds,
+                    isSent = user.id in uiState.sentTo,
+                    onAddClick = { viewModel.sendRequest(user) }
+                )
+            }
+        }
 
         when {
             uiState.isLoading -> LoadingIndicator()
             !uiState.steamLinked -> {
                 EmptyState(
                     title = "Connect Steam to get suggestions",
-                    message = "Link your Steam account from your profile to see friends already on Roundtable."
+                    message = "Link your Steam account from your profile to see friends already on Roundtable.",
+                    onMessageClick = onOpenProfile
                 )
-                TextButton(onClick = onOpenProfile) {
-                    Text("Open profile")
-                }
             }
             uiState.isLoadingSteamSuggestions -> LoadingIndicator()
             uiState.steamSuggestions.isNotEmpty() -> {
+                Text(
+                    text = "Suggested from Steam",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
                 uiState.steamSuggestions.forEach { user ->
                     AddFriendRow(
                         user = user,
@@ -211,54 +250,8 @@ fun AddFriendScreen(
             LoadingIndicator()
         }
 
-        Text(
-            text = "Search by username",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        DefaultButton(text = "Done", onClick = onDone)
 
-        DefaultTextField(
-            value = uiState.query,
-            onValueChange = viewModel::onQueryChange,
-            label = "Search by username"
-        )
-
-        uiState.error?.let { ErrorText(text = it) }
-
-        when {
-            uiState.isLoading && uiState.results.isEmpty() -> Unit
-
-            uiState.query.trim().length < MIN_QUERY_LENGTH -> {
-                if (uiState.error == null) {
-                    EmptyState(
-                        title = "Search by username to find friends",
-                        message = "Keep typing to see matching users."
-                    )
-                }
-            }
-
-            uiState.isSearching -> LoadingIndicator()
-
-            uiState.results.isEmpty() -> {
-                if (uiState.error == null) {
-                    EmptyState(
-                        title = "No users found",
-                        message = "Try a different username."
-                    )
-                }
-            }
-
-            else -> uiState.results.forEach { user ->
-                AddFriendRow(
-                    user = user,
-                    isPendingFromThem = user.id in uiState.pendingFromUserIds,
-                    isSent = user.id in uiState.sentTo,
-                    onAddClick = { viewModel.sendRequest(user) }
-                )
-            }
-        }
-
-        SecondaryButton(text = "Done", onClick = onDone)
     }
 
     uiState.currentUserId?.let { userId ->
