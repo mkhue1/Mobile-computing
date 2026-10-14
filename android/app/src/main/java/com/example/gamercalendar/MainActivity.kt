@@ -46,30 +46,8 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // TODO: REMOVE LAN PERMISSIONS WHEN WE DEPLOY
-        if (
-            Build.VERSION.SDK_INT >= 37 &&
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_LOCAL_NETWORK
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.ACCESS_LOCAL_NETWORK),
-                1001
-            )
-        }
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.READ_CALENDAR
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.READ_CALENDAR),
-                1001
-            )
+        if (savedInstanceState == null) {
+            requestStartupPermissions()
         }
 
         handleSteamDeepLink(intent)
@@ -79,10 +57,6 @@ class MainActivity : FragmentActivity() {
 
         if (BuildConfig.GOOGLE_MAPS_API_KEY.isNotBlank() && !Places.isInitialized()) {
             Places.initializeWithNewPlacesApiEnabled(applicationContext, BuildConfig.GOOGLE_MAPS_API_KEY)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
         }
 
         val sessionManager = SessionManager(applicationContext)
@@ -143,6 +117,26 @@ class MainActivity : FragmentActivity() {
         handleSocialIntent(intent)
     }
 
+    /** Requests everything in one call; Android drops any request made while another is still showing. */
+    private fun requestStartupPermissions() {
+        val permissions = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            add(Manifest.permission.READ_CALENDAR)
+            // TODO: REMOVE LAN PERMISSIONS WHEN WE DEPLOY
+            if (Build.VERSION.SDK_INT >= 37) {
+                add(Manifest.permission.ACCESS_LOCAL_NETWORK)
+            }
+        }.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (permissions.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, permissions.toTypedArray(), STARTUP_PERMISSIONS_REQUEST)
+        }
+    }
+
     private fun handleNearbyIntent(intent: Intent?) {
         if (intent?.getBooleanExtra(EXTRA_OPEN_NEARBY, false) != true) return
         NearbyOpenEvents.emit(intent.getStringExtra(EXTRA_NEARBY_SESSION_ID))
@@ -165,6 +159,7 @@ class MainActivity : FragmentActivity() {
         const val EXTRA_NEARBY_SESSION_ID = "nearby_session_id"
         const val EXTRA_OPEN_SOCIAL = "open_social"
         const val EXTRA_SOCIAL_SESSION_ID = "social_session_id"
+        private const val STARTUP_PERMISSIONS_REQUEST = 1001
     }
 
     private fun handleSteamDeepLink(intent: Intent?) {
