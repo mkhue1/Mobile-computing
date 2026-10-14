@@ -49,7 +49,53 @@ def test_steam_status_unlinked(client, make_user, auth_headers):
     response = client.get("/steam/status", headers=auth_headers(user))
 
     assert response.status_code == 200
-    assert response.json() == {"linked": False, "steam_id": None}
+    assert response.json() == {
+        "linked": False,
+        "steam_id": None,
+        "persona_name": None,
+    }
+
+
+def test_steam_status_includes_persona_name(client, make_user, auth_headers, db):
+    user = make_user("alice")
+    user.steam_id = STEAM_ID_A
+    user.steam_linked_at = datetime.now(timezone.utc)
+    db.commit()
+
+    with patch(
+        "app.routers.steam.get_steam_persona_names",
+        new=AsyncMock(return_value={STEAM_ID_A: "AliceSteam"}),
+    ):
+        response = client.get("/steam/status", headers=auth_headers(user))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "linked": True,
+        "steam_id": STEAM_ID_A,
+        "persona_name": "AliceSteam",
+    }
+
+
+def test_steam_status_keeps_link_when_persona_lookup_fails(
+    client, make_user, auth_headers, db
+):
+    user = make_user("alice")
+    user.steam_id = STEAM_ID_A
+    user.steam_linked_at = datetime.now(timezone.utc)
+    db.commit()
+
+    with patch(
+        "app.routers.steam.get_steam_persona_names",
+        new=AsyncMock(side_effect=SteamError("Failed to fetch Steam player summaries")),
+    ):
+        response = client.get("/steam/status", headers=auth_headers(user))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "linked": True,
+        "steam_id": STEAM_ID_A,
+        "persona_name": None,
+    }
 
 
 def test_steam_link_returns_auth_url(client, make_user, auth_headers):
