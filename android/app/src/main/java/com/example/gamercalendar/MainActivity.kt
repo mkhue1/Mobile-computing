@@ -6,16 +6,21 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gamercalendar.biometric.BiometricLogin
 import com.example.gamercalendar.data.api.ApiClient
 import com.example.gamercalendar.data.repository.AuthRepository
 import com.example.gamercalendar.data.session.SessionManager
@@ -23,6 +28,8 @@ import com.example.gamercalendar.ui.components.app.AppScaffold
 import com.example.gamercalendar.ui.components.layout.ScreenContainer
 import com.example.gamercalendar.ui.navigation.AppNavigation
 import com.example.gamercalendar.ui.feature.auth.AuthScreen
+import com.example.gamercalendar.ui.feature.auth.BiometricSetupDialog
+import com.example.gamercalendar.ui.feature.auth.BiometricUnlockScreen
 import com.example.gamercalendar.ui.theme.GamerCalendarTheme
 import com.example.gamercalendar.firebase.SocialNotificationType
 import com.example.gamercalendar.firebase.SocialOpenEvents
@@ -34,7 +41,7 @@ import com.example.gamercalendar.util.SteamLinkEvent
 import com.example.gamercalendar.util.SteamLinkEvents
 import com.google.android.libraries.places.api.Places
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,13 +88,25 @@ class MainActivity : ComponentActivity() {
         val sessionManager = SessionManager(applicationContext)
         ApiClient.init(sessionManager)
         val authRepository = AuthRepository(sessionManager)
-        val authFactory = AuthViewModel.Factory(sessionManager, authRepository)
+        val biometricLogin = BiometricLogin(applicationContext)
+        val authFactory = AuthViewModel.Factory(sessionManager, authRepository, biometricLogin)
 
         setContent {
             GamerCalendarTheme {
                 val authViewModel: AuthViewModel = viewModel(factory = authFactory)
                 val uiState by authViewModel.uiState.collectAsStateWithLifecycle()
                 val token by authViewModel.accessToken.collectAsStateWithLifecycle()
+                val lifecycleOwner = LocalLifecycleOwner.current
+
+                DisposableEffect(lifecycleOwner) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            authViewModel.refreshBiometricStatus()
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
 
                 when {
                     uiState.isCheckingSession -> {
@@ -99,8 +118,14 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    uiState.needsUnlock -> {
+                        BiometricUnlockScreen(authViewModel = authViewModel)
+                    }
                     !token.isNullOrBlank() -> {
                         AppNavigation(authViewModel = authViewModel)
+                        if (uiState.offerBiometricSetup) {
+                            BiometricSetupDialog(authViewModel = authViewModel)
+                        }
                     }
                     else -> {
                         AuthScreen(authViewModel = authViewModel)

@@ -14,6 +14,12 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     name = "session"
 )
 
+data class StoredSession(
+    val token: String,
+    val username: String,
+    val email: String,
+)
+
 class SessionManager(private val context: Context) {
 
     private val tokenKey = stringPreferencesKey("access_token")
@@ -41,6 +47,15 @@ class SessionManager(private val context: Context) {
         val token = context.dataStore.data.first()[tokenKey]
         cachedToken = token
         return token
+    }
+
+    suspend fun readSession(): StoredSession? {
+        val prefs = context.dataStore.data.first()
+        val token = prefs[tokenKey] ?: return null
+        val username = prefs[usernameKey] ?: return null
+        val email = prefs[emailKey] ?: return null
+        cachedToken = token
+        return StoredSession(token, username, email)
     }
 
     suspend fun saveSession(token: String, username: String, email: String) {
