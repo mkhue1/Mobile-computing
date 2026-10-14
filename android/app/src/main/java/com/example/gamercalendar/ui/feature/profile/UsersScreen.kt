@@ -89,10 +89,6 @@ fun UsersScreen(
     val steamState by steamViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
-        steamViewModel.refresh()
-    }
-
     LaunchedEffect(steamState.authUrl) {
         val url = steamState.authUrl ?: return@LaunchedEffect
         openCustomTab(context, url)
