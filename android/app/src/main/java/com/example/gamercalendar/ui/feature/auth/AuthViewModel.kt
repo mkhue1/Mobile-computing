@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -71,34 +72,39 @@ class AuthViewModel(
                 )
                 return@launch
             }
-            try {
-                val user = authRepository.me()
-                sessionManager.saveSession(token, user.username, user.email)
-                val enabled = biometricLogin.hasCredential()
-                _uiState.value = AuthUiState(
-                    isCheckingSession = false,
-                    biometricEnabled = enabled,
-                    biometricStatus = status,
-                    needsUnlock = enabled,
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                val hadBiometric = biometricLogin.hasCredential()
-                authRepository.logout()
-                val expired = e is HttpException && e.code() == 401
-                if (expired) biometricLogin.disable()
-                _uiState.value = AuthUiState(
-                    isCheckingSession = false,
-                    biometricEnabled = biometricLogin.hasCredential(),
-                    biometricStatus = status,
-                    error = if (expired && hadBiometric) {
-                        "Your login expired. Sign in with your password."
-                    } else {
-                        null
-                    }
-                )
-            }
+            val enabled = biometricLogin.hasCredential()
+            // The splash screen hides once isCheckingSession is false, so the token flow must
+            // already hold the token or the login screen flashes for a frame.
+            accessToken.first { it == token }
+            _uiState.value = AuthUiState(
+                isCheckingSession = false,
+                biometricEnabled = enabled,
+                biometricStatus = status,
+                needsUnlock = enabled,
+            )
+            verifyRestoredSession(token)
+        }
+    }
+
+    private suspend fun verifyRestoredSession(token: String) {
+        try {
+            val user = authRepository.me()
+            if (sessionManager.getToken() != token) return
+            sessionManager.saveSession(token, user.username, user.email)
+            CurrentUserStore.set(user)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: HttpException) {
+            if (e.code() != 401 || sessionManager.getToken() != token) return
+            val hadBiometric = biometricLogin.hasCredential()
+            biometricLogin.disable()
+            authRepository.logout()
+            _uiState.value = AuthUiState(
+                biometricStatus = biometricLogin.status(),
+                error = if (hadBiometric) "Your login expired. Sign in with your password." else null,
+            )
+        } catch (_: Exception) {
+            // Offline or a transient server error. Keep the saved session.
         }
     }
 
@@ -232,7 +238,9 @@ class AuthViewModel(
                     return@launch
                 }
                 if (current == null) {
-                    sessionManager.saveSession(session.token, session.username, session.email)
+                    // The background session check logged the user out while the prompt was up.
+                    _uiState.value = _uiState.value.copy(biometricBusy = false)
+                    return@launch
                 }
                 _uiState.value = _uiState.value.copy(
                     biometricBusy = false,

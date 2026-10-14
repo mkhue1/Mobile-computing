@@ -64,6 +64,8 @@ android {
 
     buildTypes {
         release {
+            // Same key as debug so the Maps key restriction matches and it installs over a debug build.
+            signingConfig = signingConfigs.getByName("debug")
             optimization {
                 enable = false
             }
@@ -90,6 +92,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(libs.androidx.lifecycle.runtime.ktx)
 
     implementation("com.squareup.retrofit2:retrofit:3.0.0")

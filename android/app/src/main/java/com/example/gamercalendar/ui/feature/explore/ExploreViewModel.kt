@@ -24,7 +24,8 @@ import retrofit2.HttpException
 
 data class ExploreUiState(
     val nearby: List<SessionListItem> = emptyList(),
-    val nearbyEnabled: Boolean = false,
+    /** Null until the saved setting has been read, so the switch doesn't start off and then flip on. */
+    val nearbyEnabled: Boolean? = null,
     val nearbyError: String? = null,
     val isRefreshing: Boolean = false
 )

@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,6 +24,7 @@ import com.example.gamercalendar.ui.components.cards.SessionCard
 import com.example.gamercalendar.ui.components.feedback.EmptyState
 import com.example.gamercalendar.ui.components.feedback.ErrorText
 import com.example.gamercalendar.ui.components.feedback.LoadingIndicator
+import com.example.gamercalendar.ui.components.inputs.DefaultTextField
 import com.example.gamercalendar.ui.feature.sessions.ScanSessionQr
 
 @Composable
@@ -51,12 +51,10 @@ fun SearchScreen(
         )
         Spacer(Modifier.height(12.dp))
 
-        OutlinedTextField(
+        DefaultTextField(
             value = query,
             onValueChange = viewModel::onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Search by game or session name") },
-            singleLine = true,
+            label = "Search by game or session name",
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     TextButton(onClick = { viewModel.onQueryChange("") }) {

@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.FilterChip
@@ -101,12 +99,13 @@ fun CalendarScreen(
             }
         }
 
+        // Each view scrolls its own content so its header stays pinned.
         Column(modifier = modifier
             .weight(1f)
-            .verticalScroll(rememberScrollState())
             .padding(
-                horizontal = 16.dp,
-                vertical = 16.dp
+                start = 16.dp,
+                top = 16.dp,
+                end = 16.dp
             )) {
             when (viewMode) {
                 CalendarViewMode.MONTH -> MonthTab(
@@ -135,7 +134,8 @@ private fun MonthTab(
         viewModel = monthViewModel,
         onSelectDate = calendar::selectDate,
         onSessionClick = onSessionClick,
-        onVisibleMonthChange = calendar::loadAround
+        onVisibleMonthChange = calendar::loadAround,
+        modifier = Modifier.fillMaxSize()
     )
 }
 
@@ -149,7 +149,8 @@ private fun WeekTab(
         viewModel = weekViewModel,
         onSelectDate = calendar::selectDate,
         onSessionClick = onSessionClick,
-        onVisibleMonthChange = calendar::loadAround
+        onVisibleMonthChange = calendar::loadAround,
+        modifier = Modifier.fillMaxSize()
     )
 }
 

@@ -41,6 +41,8 @@ class SearchViewModel(private val repository: CalendarRepository) : ViewModel() 
     /** Searches once the user has paused typing, not on every keystroke. */
     fun onQueryChange(text: String) {
         _query.value = text
+        // Loading covers the debounce too, or "No sessions found" shows before the search starts.
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             delay(SEARCH_DEBOUNCE_MS)

@@ -7,6 +7,7 @@ import com.example.gamercalendar.data.model.User
 import com.example.gamercalendar.data.model.UserCreate
 import com.example.gamercalendar.data.session.CurrentUserStore
 import com.example.gamercalendar.data.session.SessionManager
+import com.example.gamercalendar.data.session.SteamStatusStore
 import com.example.gamercalendar.firebase.PushTokenRegistration
 import com.example.gamercalendar.geofence.SessionGeofences
 
@@ -50,5 +51,6 @@ class AuthRepository(
         PushTokenRegistration.remove()
         sessionManager.clearSession()
         CurrentUserStore.clear()
+        SteamStatusStore.clear()
     }
 }

@@ -87,12 +87,12 @@ fun BiometricUnlockScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Unlock",
+                        text = "Welcome back!",
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "Confirm it's you to continue",
+                        text = "Sign in to continue",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

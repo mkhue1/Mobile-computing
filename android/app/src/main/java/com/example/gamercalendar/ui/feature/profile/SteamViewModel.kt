@@ -2,7 +2,10 @@ package com.example.gamercalendar.ui.feature.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.gamercalendar.data.model.SteamStatus
 import com.example.gamercalendar.data.repository.SteamRepository
+import com.example.gamercalendar.data.session.CurrentUserStore
+import com.example.gamercalendar.data.session.SteamStatusStore
 import com.example.gamercalendar.util.SteamLinkEvent
 import com.example.gamercalendar.util.SteamLinkEvents
 import com.example.gamercalendar.util.apiErrorDetail
@@ -27,10 +30,13 @@ class SteamViewModel(
     private val steamRepository: SteamRepository = SteamRepository()
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(SteamUiState(isLoading = true))
+    private val _uiState = MutableStateFlow(initialState())
     val uiState: StateFlow<SteamUiState> = _uiState.asStateFlow()
 
     init {
+        // Fetched once per login; the persona name only comes from this call.
+        if (SteamStatusStore.status.value == null) refresh()
+
         viewModelScope.launch {
             SteamLinkEvents.events.collect { event ->
                 when (event) {
@@ -53,11 +59,27 @@ class SteamViewModel(
         }
     }
 
-    fun refresh() {
+    private fun initialState(): SteamUiState {
+        SteamStatusStore.status.value?.let { status ->
+            return SteamUiState(
+                linked = status.linked,
+                steamId = status.steam_id,
+                personaName = status.persona_name
+            )
+        }
+        val user = CurrentUserStore.user.value ?: return SteamUiState(isLoading = true)
+        return SteamUiState(linked = user.steam_linked)
+    }
+
+    private fun refresh() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            // Only show "Checking…" when there is nothing to show yet.
+            if (SteamStatusStore.status.value == null && CurrentUserStore.user.value == null) {
+                _uiState.update { it.copy(isLoading = true, error = null) }
+            }
             try {
                 val status = steamRepository.getStatus()
+                SteamStatusStore.set(status)
                 _uiState.update {
                     it.copy(
                         linked = status.linked,
@@ -110,6 +132,7 @@ class SteamViewModel(
             _uiState.update { it.copy(isLoading = true, error = null, message = null) }
             try {
                 steamRepository.unlink()
+                SteamStatusStore.set(SteamStatus(linked = false))
                 _uiState.update {
                     it.copy(
                         linked = false,

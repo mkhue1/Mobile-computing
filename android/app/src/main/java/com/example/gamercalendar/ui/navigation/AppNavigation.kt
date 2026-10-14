@@ -136,6 +136,9 @@ fun AppNavigation(
             AppBottomBar(
                 currentRoute = currentRoute,
                 onNavigate = { route ->
+                    // Re-tapping the tab you're on would rebuild it and reload its data.
+                    if (route == currentRoute) return@AppBottomBar
+
                     // Home always opens fresh, restoring it would bring back tabs stacked on top,
                     // it is never removed from back stack so state is preserved anyway
                     val keepsState = route != Routes.ITEM_1
