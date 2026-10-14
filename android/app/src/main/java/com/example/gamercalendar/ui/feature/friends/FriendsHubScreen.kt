@@ -343,7 +343,6 @@ private fun SteamRelationHint(
             text to MaterialTheme.colorScheme.primary
         }
         "not_friends" -> "Not a Steam friend" to MaterialTheme.colorScheme.onSurfaceVariant
-        "not_linked" -> "No Steam account linked" to MaterialTheme.colorScheme.onSurfaceVariant
         else -> return
     }
 
