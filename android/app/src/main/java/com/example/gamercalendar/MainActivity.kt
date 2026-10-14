@@ -92,7 +92,7 @@ class MainActivity : ComponentActivity() {
         handleSocialIntent(intent)
     }
 
-    /** Requests everything in one call; Android only shows one permission dialog at a time and cancels earlier requests. */
+    /** Requests everything in one call; Android drops any request made while another is still showing. */
     private fun requestStartupPermissions() {
         val permissions = buildList {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
