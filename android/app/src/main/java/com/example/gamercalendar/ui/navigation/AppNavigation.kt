@@ -1,5 +1,7 @@
 package com.example.gamercalendar.ui.navigation
 
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -164,7 +166,12 @@ fun AppNavigation(
         NavHost(
             navController = navController,
             startDestination = Routes.ITEM_1,
-            modifier = Modifier.padding(innerPadding),
+            // With a bottom textfield, the Scaffold's padding ignores the keyboard, so add whatever
+            // part of the keyboard sits above the bar.
+            modifier = Modifier
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+                .imePadding(),
             enterTransition = {
                 fadeIn(
                     animationSpec = tween(30)

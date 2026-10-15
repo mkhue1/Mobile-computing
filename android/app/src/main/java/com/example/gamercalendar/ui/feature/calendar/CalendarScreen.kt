@@ -3,6 +3,7 @@ package com.example.gamercalendar.ui.feature.calendar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +19,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,9 +36,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -252,10 +258,10 @@ internal fun readableOn(background: Color): Color =
 
 /**
  * Text that never splits a word across two lines. Compose breaks a word that is wider than the
- * available width, giving "Teamfigh" / "t Tactics". This lays the text out normally, checks
- * whether a word was split, and if so shrinks the font a little and lays it out again, until no
- * word is split or [minFontSize] is reached. It looks at the real layout, so it is correct for
- * whatever font and font scale the app is using.
+ * available width, giving "Teamfigh" / "t Tactics". Before drawing, this measures the text at
+ * [fontSize] and then a little smaller each time, until no word is split or [minFontSize] is
+ * reached, and draws it once at that size. It measures with the real font and font scale, so the
+ * result is correct for whatever the app is using.
  */
 @Composable
 internal fun WordSafeText(
@@ -268,23 +274,59 @@ internal fun WordSafeText(
     lineHeight: TextUnit = TextUnit.Unspecified,
     fontWeight: FontWeight? = null
 ) {
-    var size by remember(text, fontSize) { mutableStateOf(fontSize) }
+    val textMeasurer = rememberTextMeasurer()
+    val baseStyle = LocalTextStyle.current
 
-    Text(
-        text = text,
-        modifier = modifier,
-        fontSize = size,
-        lineHeight = lineHeight,
-        fontWeight = fontWeight,
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-        color = color,
-        onTextLayout = { layout ->
-            if (size.value > minFontSize.value && layout.splitsAWord(text)) {
-                size = (size.value - 0.5f).sp
-            }
+    BoxWithConstraints(modifier = modifier) {
+        val maxWidthPx = constraints.maxWidth
+        val size = remember(text, fontSize, minFontSize, maxLines, lineHeight, fontWeight, baseStyle, maxWidthPx) {
+            fittingFontSize(
+                text = text,
+                fontSize = fontSize,
+                minFontSize = minFontSize,
+                maxLines = maxLines,
+                style = baseStyle.merge(TextStyle(lineHeight = lineHeight, fontWeight = fontWeight)),
+                maxWidthPx = maxWidthPx,
+                textMeasurer = textMeasurer
+            )
         }
-    )
+
+        Text(
+            text = text,
+            fontSize = size,
+            lineHeight = lineHeight,
+            fontWeight = fontWeight,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            color = color
+        )
+    }
+}
+
+/** The largest size from [fontSize] down to [minFontSize], in 0.5sp steps, that splits no word. */
+private fun fittingFontSize(
+    text: String,
+    fontSize: TextUnit,
+    minFontSize: TextUnit,
+    maxLines: Int,
+    style: TextStyle,
+    maxWidthPx: Int,
+    textMeasurer: TextMeasurer
+): TextUnit {
+    if (maxWidthPx == Constraints.Infinity) return fontSize
+    var size = fontSize.value
+    while (size > minFontSize.value) {
+        val layout = textMeasurer.measure(
+            text = text,
+            style = style.copy(fontSize = size.sp),
+            overflow = TextOverflow.Ellipsis,
+            maxLines = maxLines,
+            constraints = Constraints(maxWidth = maxWidthPx)
+        )
+        if (!layout.splitsAWord(text)) break
+        size -= 0.5f
+    }
+    return size.coerceAtLeast(minFontSize.value).sp
 }
 
 /** True if any line ends in the middle of a word (not at a space or after a hyphen). */
