@@ -1,4 +1,6 @@
 .env
+.env.test
+server/firebase-service-account.json
 __pycache__/
 *.pyc
 .pytest_cache/

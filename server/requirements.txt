@@ -1,6 +1,15 @@
 fastapi
+python-multipart
 uvicorn[standard]
 sqlalchemy
 psycopg[binary]
 pydantic-settings
 alembic
+email-validator
+bcrypt
+PyJWT
+httpx
+requests
+cachetools
+firebase-admin
+zxcvbn

@@ -36,6 +36,20 @@ Set client type to condidential and use https://localhost/ for the Redirect URL 
 Click manage then save client id and the secret to the .env file.
 
 
+STEAM SETUP:
+
+1. Get a Steam Web API key: https://steamcommunity.com/dev/apikey
+2. Put it in `.env` as `STEAM_API_KEY=...`
+3. Set `PUBLIC_BASE_URL` to a URL the phone/emulator can open for the OpenID callback
+   - Android emulator talking to Docker on the host: `http://10.0.2.2:8000`
+   - Physical device on the same Wi‑Fi: `http://YOUR_LAN_IP:8000`
+4. Optional deep-link overrides (defaults are fine for the app):
+   - `STEAM_DEEP_LINK_SUCCESS=gamercalendar://steam/linked`
+   - `STEAM_DEEP_LINK_ERROR=gamercalendar://steam/error`
+
+Link Steam from the app profile (Account icon). Friend suggestions then appear on Add friend.
+
+
 BACKEND FOLDER STRUCTURE:
 
 3 main folders within server/app

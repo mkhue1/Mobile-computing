@@ -1,39 +1,177 @@
 package com.example.gamercalendar
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.gamercalendar.ui.screens.UsersScreen
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.gamercalendar.biometric.BiometricLogin
+import com.example.gamercalendar.data.api.ApiClient
+import com.example.gamercalendar.data.repository.AuthRepository
+import com.example.gamercalendar.data.session.SessionManager
+import com.example.gamercalendar.ui.navigation.AppNavigation
+import com.example.gamercalendar.ui.feature.auth.AuthScreen
+import com.example.gamercalendar.ui.feature.auth.BiometricSetupDialog
+import com.example.gamercalendar.ui.feature.auth.BiometricUnlockScreen
 import com.example.gamercalendar.ui.theme.GamerCalendarTheme
+import com.example.gamercalendar.firebase.SocialNotificationType
+import com.example.gamercalendar.firebase.SocialOpenEvents
+import com.example.gamercalendar.firebase.SocialOpenRequest
+import com.example.gamercalendar.geofence.NearbyOpenEvents
+import com.example.gamercalendar.geofence.SessionGeofences
+import com.example.gamercalendar.ui.feature.auth.AuthViewModel
+import com.example.gamercalendar.util.SteamLinkEvent
+import com.example.gamercalendar.util.SteamLinkEvents
+import com.google.android.libraries.places.api.Places
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        if (
-            Build.VERSION.SDK_INT >= 37 &&
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_LOCAL_NETWORK
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.ACCESS_LOCAL_NETWORK),
-                1001
-            )
+        if (savedInstanceState == null) {
+            requestStartupPermissions()
         }
+
+        handleSteamDeepLink(intent)
+        handleNearbyIntent(intent)
+        handleSocialIntent(intent)
+        SessionGeofences.install(applicationContext)
+
+        if (BuildConfig.GOOGLE_MAPS_API_KEY.isNotBlank() && !Places.isInitialized()) {
+            Places.initializeWithNewPlacesApiEnabled(applicationContext, BuildConfig.GOOGLE_MAPS_API_KEY)
+        }
+
+        val sessionManager = SessionManager(applicationContext)
+        ApiClient.init(sessionManager)
+        val authRepository = AuthRepository(sessionManager)
+        val biometricLogin = BiometricLogin(applicationContext)
+        val authFactory = AuthViewModel.Factory(sessionManager, authRepository, biometricLogin)
+        val authViewModel = ViewModelProvider(this, authFactory)[AuthViewModel::class.java]
+        splashScreen.setKeepOnScreenCondition { authViewModel.uiState.value.isCheckingSession }
 
         setContent {
             GamerCalendarTheme {
-                UsersScreen()
+                val uiState by authViewModel.uiState.collectAsStateWithLifecycle()
+                val token by authViewModel.accessToken.collectAsStateWithLifecycle()
+                val lifecycleOwner = LocalLifecycleOwner.current
+
+                DisposableEffect(lifecycleOwner) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            authViewModel.refreshBiometricStatus()
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
+
+                when {
+                    uiState.isCheckingSession -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background)
+                        )
+                    }
+                    uiState.needsUnlock -> {
+                        BiometricUnlockScreen(authViewModel = authViewModel)
+                    }
+                    !token.isNullOrBlank() -> {
+                        AppNavigation(authViewModel = authViewModel)
+                        if (uiState.offerBiometricSetup) {
+                            BiometricSetupDialog(authViewModel = authViewModel)
+                        }
+                    }
+                    else -> {
+                        AuthScreen(authViewModel = authViewModel)
+                    }
+                }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleSteamDeepLink(intent)
+        handleNearbyIntent(intent)
+        handleSocialIntent(intent)
+    }
+
+    /** Requests everything in one call; Android drops any request made while another is still showing. */
+    private fun requestStartupPermissions() {
+        val permissions = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            add(Manifest.permission.READ_CALENDAR)
+            // TODO: REMOVE LAN PERMISSIONS WHEN WE DEPLOY
+            if (Build.VERSION.SDK_INT >= 37) {
+                add(Manifest.permission.ACCESS_LOCAL_NETWORK)
+            }
+        }.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (permissions.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, permissions.toTypedArray(), STARTUP_PERMISSIONS_REQUEST)
+        }
+    }
+
+    private fun handleNearbyIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_NEARBY, false) != true) return
+        NearbyOpenEvents.emit(intent.getStringExtra(EXTRA_NEARBY_SESSION_ID))
+        intent.removeExtra(EXTRA_OPEN_NEARBY)
+    }
+
+    private fun handleSocialIntent(intent: Intent?) {
+        val type = SocialNotificationType.fromMessageType(intent?.getStringExtra(EXTRA_OPEN_SOCIAL)) ?: return
+        val request = when (type) {
+            SocialNotificationType.SESSION_INVITE ->
+                intent?.getStringExtra(EXTRA_SOCIAL_SESSION_ID)?.let { SocialOpenRequest.SessionInvite(it) }
+            SocialNotificationType.FRIEND_REQUEST -> SocialOpenRequest.FriendRequests
+        }
+        request?.let(SocialOpenEvents::emit)
+        intent?.removeExtra(EXTRA_OPEN_SOCIAL)
+    }
+
+    companion object {
+        const val EXTRA_OPEN_NEARBY = "open_nearby"
+        const val EXTRA_NEARBY_SESSION_ID = "nearby_session_id"
+        const val EXTRA_OPEN_SOCIAL = "open_social"
+        const val EXTRA_SOCIAL_SESSION_ID = "social_session_id"
+        private const val STARTUP_PERMISSIONS_REQUEST = 1001
+    }
+
+    private fun handleSteamDeepLink(intent: Intent?) {
+        val data: Uri = intent?.data ?: return
+        if (data.scheme != "gamercalendar" || data.host != "steam") return
+
+        when (data.path?.trim('/')) {
+            "linked" -> SteamLinkEvents.emit(SteamLinkEvent.Success)
+            "error" -> SteamLinkEvents.emit(
+                SteamLinkEvent.Error(data.getQueryParameter("reason"))
+            )
         }
     }
 }

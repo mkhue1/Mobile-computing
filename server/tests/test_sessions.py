@@ -1,0 +1,1571 @@
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
+
+import pytest
+from sqlalchemy import select
+
+from app.models.game import Game
+from app.models.gaming_session import (
+    GamingSession,
+    InviteStatus,
+    SessionInvite,
+    SessionParticipant,
+    SessionStatus,
+)
+
+
+def session_payload(game, **overrides):
+    start_at = datetime.now(timezone.utc) + timedelta(days=1)
+    payload = {
+        "game_id": str(game.id),
+        "title": "Friday night",
+        "start_at": start_at.isoformat(),
+        "end_at": (start_at + timedelta(hours=2)).isoformat(),
+        "session_type": "online",
+        "visibility": "private",
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.fixture
+def create_session(client, auth_headers, game):
+    def _create_session(organiser, **overrides):
+        response = client.post(
+            "/sessions/create",
+            json=session_payload(game, **overrides),
+            headers=auth_headers(organiser),
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    return _create_session
+
+
+@pytest.fixture
+def send_invite(client, auth_headers):
+    def _send_invite(sender, session_id, receiver):
+        return client.post(
+            f"/sessions/{session_id}/invite",
+            json={"session_id": session_id, "receiver_id": str(receiver.id)},
+            headers=auth_headers(sender),
+        )
+
+    return _send_invite
+
+
+@pytest.fixture
+def invited(make_user, create_session, send_invite):
+    """An organiser, a session they created, and a pending invite to a second user."""
+    organiser = make_user("organiser")
+    invitee = make_user("invitee")
+    session = create_session(organiser)
+
+    response = send_invite(organiser, session["id"], invitee)
+    assert response.status_code == 201, response.text
+
+    return organiser, invitee, session, response.json()
+
+
+# --- Authentication -----------------------------------------------------------
+
+
+def test_requires_authentication(client):
+    response = client.get("/sessions/")
+
+    # HTTPBearer rejects a missing header; the exact code differs between FastAPI versions.
+    assert response.status_code in (401, 403)
+
+
+def test_rejects_invalid_token(client):
+    response = client.get("/sessions/", headers={"Authorization": "Bearer not-a-jwt"})
+
+    assert response.status_code == 401
+
+
+# --- POST /sessions/create ----------------------------------------------------
+
+
+def test_create_session(client, db, make_user, auth_headers, game):
+    organiser = make_user()
+
+    response = client.post(
+        "/sessions/create",
+        json=session_payload(game),
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["organiser_id"] == str(organiser.id)
+    assert body["status"] == "open"
+    assert body["player_count"] == 1
+    assert body["game"]["id"] == str(game.id)
+    assert body["game"]["name"] == game.name
+
+    participant = db.get(SessionParticipant, (UUID(body["id"]), organiser.id))
+    assert participant is not None
+
+
+def test_create_session_ignores_client_supplied_status(make_user, create_session):
+    session = create_session(make_user(), status="cancelled")
+
+    assert session["status"] == "open"
+
+
+def test_create_group_session_requires_group_id(client, make_user, auth_headers, game):
+    response = client.post(
+        "/sessions/create",
+        json=session_payload(game, visibility="group"),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 400
+
+
+def test_create_session_with_unknown_group(client, make_user, auth_headers, game):
+    response = client.post(
+        "/sessions/create",
+        json=session_payload(game, visibility="group", group_id=str(uuid4())),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 404
+
+
+def test_create_session_for_group_user_is_not_in(
+    client, make_user, make_group, auth_headers, game
+):
+    group = make_group(make_user("owner"))
+    outsider = make_user("outsider")
+
+    response = client.post(
+        "/sessions/create",
+        json=session_payload(game, visibility="group", group_id=str(group.id)),
+        headers=auth_headers(outsider),
+    )
+
+    assert response.status_code == 403
+
+
+def test_create_group_session_invites_other_members(
+    db, make_user, make_group, create_session
+):
+    organiser = make_user("organiser")
+    member_a = make_user("member_a")
+    member_b = make_user("member_b")
+    group = make_group(organiser, members=(member_a, member_b))
+
+    session = create_session(organiser, visibility="group", group_id=str(group.id))
+
+    invites = db.scalars(
+        select(SessionInvite).where(SessionInvite.session_id == UUID(session["id"]))
+    ).all()
+    assert {invite.receiver_id for invite in invites} == {member_a.id, member_b.id}
+    assert all(invite.sender_id == organiser.id for invite in invites)
+    assert all(invite.status == InviteStatus.PENDING for invite in invites)
+
+
+# --- GET /sessions/ -----------------------------------------------------------
+
+
+def test_get_sessions_only_returns_own_sessions(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    stranger = make_user("stranger")
+    session = create_session(organiser)
+
+    organiser_sessions = client.get("/sessions/", headers=auth_headers(organiser)).json()
+    stranger_sessions = client.get("/sessions/", headers=auth_headers(stranger)).json()
+
+    assert [s["id"] for s in organiser_sessions] == [session["id"]]
+    assert stranger_sessions == []
+
+
+# --- GET /sessions/range ------------------------------------------------------
+
+
+RANGE_START = datetime(2030, 6, 10, 12, 0, tzinfo=timezone.utc)
+RANGE_END = RANGE_START + timedelta(days=1)
+
+
+def range_params(start=RANGE_START, end=RANGE_END):
+    return {"start": start.isoformat(), "end": end.isoformat()}
+
+
+def create_timed_session(create_session, organiser, title, start_at, end_at):
+    return create_session(
+        organiser, title=title, start_at=start_at.isoformat(), end_at=end_at.isoformat()
+    )
+
+
+def test_get_sessions_in_range_returns_overlapping_sessions(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    hour = timedelta(hours=1)
+    sessions = {
+        "inside": (RANGE_START + hour, RANGE_START + 2 * hour),
+        "starts_before": (RANGE_START - hour, RANGE_START + hour),
+        "ends_after": (RANGE_END - hour, RANGE_END + hour),
+        "covers_range": (RANGE_START - hour, RANGE_END + hour),
+        "before": (RANGE_START - 3 * hour, RANGE_START - 2 * hour),
+        "after": (RANGE_END + 2 * hour, RANGE_END + 3 * hour),
+        "ends_at_start": (RANGE_START - hour, RANGE_START),
+        "starts_at_end": (RANGE_END, RANGE_END + hour),
+    }
+    for title, (start_at, end_at) in sessions.items():
+        create_timed_session(create_session, organiser, title, start_at, end_at)
+
+    response = client.get(
+        "/sessions/range", params=range_params(), headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200
+    # Ordered by start time.
+    assert [s["title"] for s in response.json()] == [
+        "starts_before",
+        "covers_range",
+        "inside",
+        "ends_after",
+    ]
+
+
+def test_get_sessions_in_range_only_returns_own_sessions(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    stranger = make_user("stranger")
+    create_timed_session(
+        create_session,
+        organiser,
+        "public",
+        RANGE_START + timedelta(hours=1),
+        RANGE_START + timedelta(hours=2),
+    )
+
+    response = client.get(
+        "/sessions/range", params=range_params(), headers=auth_headers(stranger)
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_sessions_in_range_includes_joined_sessions(
+    client, auth_headers, invited
+):
+    _, invitee, session, invite = invited
+    accept = client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+    assert accept.status_code == 200, accept.text
+    start_at = datetime.fromisoformat(session["start_at"])
+
+    response = client.get(
+        "/sessions/range",
+        params=range_params(start_at - timedelta(hours=1), start_at + timedelta(hours=1)),
+        headers=auth_headers(invitee),
+    )
+
+    assert [s["id"] for s in response.json()] == [session["id"]]
+
+
+def test_get_sessions_in_range_rejects_end_before_start(client, make_user, auth_headers):
+    response = client.get(
+        "/sessions/range",
+        params=range_params(start=RANGE_END, end=RANGE_START),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 400
+
+
+def test_get_sessions_in_range_rejects_timezone_naive_times(client, make_user, auth_headers):
+    response = client.get(
+        "/sessions/range",
+        params=range_params(
+            start=RANGE_START.replace(tzinfo=None), end=RANGE_END.replace(tzinfo=None)
+        ),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 422
+
+
+# --- GET /sessions/{session_id} -----------------------------------------------
+
+
+def test_organiser_can_view_session(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+
+    response = client.get(f"/sessions/{session['id']}", headers=auth_headers(organiser))
+
+    assert response.status_code == 200
+    assert response.json()["id"] == session["id"]
+
+
+def test_private_session_is_hidden_from_strangers(
+    client, make_user, auth_headers, create_session
+):
+    session = create_session(make_user("organiser"), visibility="private")
+
+    response = client.get(
+        f"/sessions/{session['id']}", headers=auth_headers(make_user("stranger"))
+    )
+
+    assert response.status_code == 404
+
+
+def test_public_session_is_visible_to_strangers(
+    client, make_user, auth_headers, create_session
+):
+    session = create_session(make_user("organiser"), visibility="public")
+
+    response = client.get(
+        f"/sessions/{session['id']}", headers=auth_headers(make_user("stranger"))
+    )
+
+    assert response.status_code == 200
+
+
+def test_invitee_can_view_private_session(client, auth_headers, invited):
+    _, invitee, session, _ = invited
+
+    response = client.get(f"/sessions/{session['id']}", headers=auth_headers(invitee))
+
+    assert response.status_code == 200
+
+
+def test_get_unknown_session(client, make_user, auth_headers):
+    response = client.get(f"/sessions/{uuid4()}", headers=auth_headers(make_user()))
+
+    assert response.status_code == 404
+
+
+# --- GET /sessions/{session_id}/participants ----------------------------------
+
+
+def test_get_participants(client, auth_headers, invited):
+    organiser, invitee, session, invite = invited
+    client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    response = client.get(
+        f"/sessions/{session['id']}/participants", headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [p["user"]["id"] for p in body] == [str(organiser.id), str(invitee.id)]
+    assert body[0]["user"]["username"] == "organiser"
+    assert body[0]["joined_at"] is not None
+
+
+def test_participants_exclude_pending_invitees(client, auth_headers, invited):
+    organiser, _, session, _ = invited
+
+    response = client.get(
+        f"/sessions/{session['id']}/participants", headers=auth_headers(organiser)
+    )
+
+    assert [p["user"]["id"] for p in response.json()] == [str(organiser.id)]
+
+
+def test_invitee_can_view_participants(client, auth_headers, invited):
+    _, invitee, session, _ = invited
+
+    response = client.get(
+        f"/sessions/{session['id']}/participants", headers=auth_headers(invitee)
+    )
+
+    assert response.status_code == 200
+
+
+def test_participants_of_private_session_hidden_from_strangers(
+    client, make_user, auth_headers, create_session
+):
+    session = create_session(make_user("organiser"), visibility="private")
+
+    response = client.get(
+        f"/sessions/{session['id']}/participants", headers=auth_headers(make_user("stranger"))
+    )
+
+    assert response.status_code == 404
+
+
+def test_participants_of_unknown_session(client, make_user, auth_headers):
+    response = client.get(f"/sessions/{uuid4()}/participants", headers=auth_headers(make_user()))
+
+    assert response.status_code == 404
+
+
+# --- PATCH /sessions/{session_id} ---------------------------------------------
+
+
+def test_update_session(client, db, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser, description="Bring snacks")
+    new_start = datetime.now(timezone.utc) + timedelta(days=3)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={
+            "title": "Saturday night",
+            "start_at": new_start.isoformat(),
+            "end_at": (new_start + timedelta(hours=4)).isoformat(),
+            "player_limit": 6,
+        },
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["title"] == "Saturday night"
+    assert datetime.fromisoformat(body["start_at"]) == new_start
+    assert body["player_limit"] == 6
+    # Fields left out of the request are unchanged.
+    assert body["description"] == "Bring snacks"
+    assert body["visibility"] == "private"
+
+    stored = db.get(GamingSession, UUID(session["id"]))
+    assert stored.title == "Saturday night"
+
+
+def test_update_session_null_clears_optional_field(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    session = create_session(organiser, description="Bring snacks", player_limit=4)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"description": None, "player_limit": None},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["description"] is None
+    assert response.json()["player_limit"] is None
+
+
+def test_update_session_with_full_form(client, make_user, auth_headers, game, create_session):
+    """The app's edit screen sends every field, including nulls, so a create payload must be accepted."""
+    organiser = make_user()
+    session = create_session(organiser)
+    payload = session_payload(
+        game,
+        title=None,
+        description=None,
+        group_id=None,
+        location_name="Alex's place",
+        session_type="in_person",
+        player_limit=None,
+    )
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json=payload, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["title"] is None
+    assert response.json()["session_type"] == "in_person"
+    assert response.json()["location_name"] == "Alex's place"
+
+
+def test_update_session_game_returns_new_game(client, db, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+    new_game = Game(igdb_id=2, name="Another Game")
+    db.add(new_game)
+    db.commit()
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"game_id": str(new_game.id)},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["game"]["id"] == str(new_game.id)
+    assert response.json()["game"]["name"] == "Another Game"
+
+
+def test_only_organiser_can_update(client, auth_headers, invited):
+    _, invitee, session, _ = invited
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"title": "Hijacked"}, headers=auth_headers(invitee)
+    )
+
+    assert response.status_code == 403
+
+
+def test_update_unknown_session(client, make_user, auth_headers):
+    response = client.patch(
+        f"/sessions/{uuid4()}", json={"title": "Nope"}, headers=auth_headers(make_user())
+    )
+
+    assert response.status_code == 404
+
+
+def test_cannot_update_cancelled_session(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"title": "Back on"}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 409
+
+
+def test_update_rejects_end_before_start(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+    # Only end_at is sent, so it's checked against the stored start time.
+    earlier = datetime.fromisoformat(session["start_at"]) - timedelta(hours=1)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"end_at": earlier.isoformat()},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_rejects_timezone_naive_times(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"start_at": "2030-01-01T18:00:00"},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("field", ["game_id", "start_at", "end_at", "session_type", "visibility"])
+def test_update_rejects_null_required_field(
+    client, make_user, auth_headers, create_session, field
+):
+    organiser = make_user()
+    session = create_session(organiser)
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={field: None}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_rejects_non_positive_player_limit(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    session = create_session(organiser)
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"player_limit": 0}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_player_limit_below_player_count(client, auth_headers, invited):
+    organiser, invitee, session, invite = invited
+    client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"player_limit": 1}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 409
+
+
+def test_update_between_non_group_visibilities(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    session = create_session(organiser, visibility="private")
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"visibility": "public"}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["visibility"] == "public"
+
+
+def test_cannot_move_session_into_group(
+    client, db, make_user, make_group, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    group = make_group(organiser)
+    session = create_session(organiser)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"visibility": "group", "group_id": str(group.id)},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 400
+    assert db.get(GamingSession, UUID(session["id"])).group_id is None
+
+
+@pytest.mark.parametrize("changes", [{"visibility": "public"}, {"visibility": "public", "group_id": None}])
+def test_cannot_move_session_out_of_group(
+    client, make_user, make_group, auth_headers, create_session, changes
+):
+    organiser = make_user("organiser")
+    group = make_group(organiser)
+    session = create_session(organiser, visibility="group", group_id=str(group.id))
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json=changes, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 400
+
+
+def test_cannot_change_session_group(
+    client, make_user, make_group, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    group = make_group(organiser)
+    other_group = make_group(organiser)
+    session = create_session(organiser, visibility="group", group_id=str(group.id))
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"group_id": str(other_group.id)},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_group_session_resending_same_group(
+    client, make_user, make_group, auth_headers, game, create_session
+):
+    """The edit form sends the group back unchanged, which must be accepted."""
+    organiser = make_user("organiser")
+    group = make_group(organiser)
+    session = create_session(organiser, visibility="group", group_id=str(group.id))
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json=session_payload(game, title="Renamed", visibility="group", group_id=str(group.id)),
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["title"] == "Renamed"
+    assert response.json()["group_id"] == str(group.id)
+
+
+# --- Session locations --------------------------------------------------------
+
+
+GOOD_GAMES = {
+    "location_name": "Good Games Melbourne",
+    "location_address": "Shop 1, 123 Swanston St, Melbourne VIC 3000, Australia",
+    "location_place_id": "ChIJexamplePlaceId",
+    "location_lat": -37.8136,
+    "location_lng": 144.9631,
+}
+
+
+def test_create_in_person_session_with_place(client, db, make_user, auth_headers, game):
+    response = client.post(
+        "/sessions/create",
+        json=session_payload(game, session_type="in_person", **GOOD_GAMES),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    for field, value in GOOD_GAMES.items():
+        assert body[field] == value
+
+    stored = db.get(GamingSession, UUID(body["id"]))
+    assert stored.location_place_id == GOOD_GAMES["location_place_id"]
+    assert stored.location_lat == GOOD_GAMES["location_lat"]
+
+
+def test_public_in_person_sessions_for_the_map(client, make_user, auth_headers, create_session):
+    organiser = make_user("organiser")
+    placed = create_session(
+        organiser, visibility="public", session_type="in_person", **GOOD_GAMES
+    )
+    create_session(organiser, visibility="public", session_type="online")
+    create_session(
+        organiser, visibility="public", session_type="in_person", location_name="Alex's place"
+    )
+    create_session(
+        organiser, visibility="private", session_type="in_person", **GOOD_GAMES
+    )
+    create_session(
+        organiser, visibility="friends", session_type="in_person", **GOOD_GAMES
+    )
+
+    stranger = client.get(
+        "/sessions/public",
+        params={"session_type": "in_person", "has_location": True, "include_joined": True},
+        headers=auth_headers(make_user("stranger")),
+    )
+    assert stranger.status_code == 200, stranger.text
+    assert [session["id"] for session in stranger.json()] == [placed["id"]]
+
+    # Search hides sessions you have already joined. The map asks to include them.
+    hidden = client.get("/sessions/public", headers=auth_headers(organiser))
+    assert hidden.json() == []
+
+    included = client.get(
+        "/sessions/public",
+        params={"include_joined": True, "session_type": "in_person", "has_location": True},
+        headers=auth_headers(organiser),
+    )
+    assert [session["id"] for session in included.json()] == [placed["id"]]
+
+
+def test_nearby_public_sessions_are_this_week_and_within_range(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    near = create_session(
+        organiser, visibility="public", session_type="in_person", **GOOD_GAMES
+    )
+    far = {**GOOD_GAMES, "location_name": "Far away", "location_lat": -37.0, "location_lng": 144.9631}
+    create_session(organiser, visibility="public", session_type="in_person", **far)
+    later = datetime.now(timezone.utc) + timedelta(days=8)
+    create_session(
+        organiser,
+        visibility="public",
+        session_type="in_person",
+        start_at=later.isoformat(),
+        end_at=(later + timedelta(hours=2)).isoformat(),
+        **GOOD_GAMES,
+    )
+
+    response = client.get(
+        "/sessions/public",
+        params={
+            "session_type": "in_person",
+            "has_location": True,
+            "include_joined": True,
+            "near_lat": GOOD_GAMES["location_lat"],
+            "near_lng": GOOD_GAMES["location_lng"],
+            "radius_km": 30,
+            "within_days": 7,
+        },
+        headers=auth_headers(make_user("stranger")),
+    )
+
+    assert response.status_code == 200, response.text
+    assert [session["id"] for session in response.json()] == [near["id"]]
+
+
+def test_nearby_public_sessions_require_both_coordinates(client, make_user, auth_headers):
+    response = client.get(
+        "/sessions/public",
+        params={"near_lat": -37.8136},
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 400
+
+
+def test_create_in_person_session_with_name_only(make_user, create_session):
+    session = create_session(make_user(), session_type="in_person", location_name="Alex's place")
+
+    assert session["location_name"] == "Alex's place"
+    assert session["location_place_id"] is None
+    assert session["location_lat"] is None
+
+
+@pytest.mark.parametrize("location_name", [None, "   "])
+def test_create_in_person_session_requires_location(
+    client, make_user, auth_headers, game, location_name
+):
+    response = client.post(
+        "/sessions/create",
+        json=session_payload(game, session_type="in_person", location_name=location_name),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"location_lat": None},
+        {"location_lng": None},
+        {"location_name": None},
+        {"location_lat": 90.1},
+        {"location_lat": -90.1},
+        {"location_lng": 180.1},
+        {"location_lng": -180.1},
+    ],
+    ids=["missing lat", "missing lng", "missing name", "lat high", "lat low", "lng high", "lng low"],
+)
+def test_create_rejects_invalid_location(client, make_user, auth_headers, game, overrides):
+    response = client.post(
+        "/sessions/create",
+        json=session_payload(game, session_type="in_person", **{**GOOD_GAMES, **overrides}),
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_location_to_place(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", location_name="Alex's place")
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json=GOOD_GAMES, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200, response.text
+    for field, value in GOOD_GAMES.items():
+        assert response.json()[field] == value
+
+
+def test_update_location_name_clears_old_place_details(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", **GOOD_GAMES)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"location_name": "Alex's place"},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["location_name"] == "Alex's place"
+    assert body["location_address"] is None
+    assert body["location_place_id"] is None
+    assert body["location_lat"] is None
+    assert body["location_lng"] is None
+
+
+def test_update_other_fields_keeps_location(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", **GOOD_GAMES)
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"title": "Board games"}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 200, response.text
+    for field, value in GOOD_GAMES.items():
+        assert response.json()[field] == value
+
+
+def test_update_rejects_partial_coordinates(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", **GOOD_GAMES)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"location_name": "Somewhere", "location_lat": -37.0},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_cannot_clear_location_of_in_person_session(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", **GOOD_GAMES)
+
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"location_name": None}, headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_to_in_person_requires_location(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"session_type": "in_person"},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_to_online_can_clear_location(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser, session_type="in_person", **GOOD_GAMES)
+
+    response = client.patch(
+        f"/sessions/{session['id']}",
+        json={"session_type": "online", "location_name": None},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["location_name"] is None
+    assert response.json()["location_lat"] is None
+
+
+# --- POST /sessions/{session_id}/cancel ---------------------------------------
+
+
+def test_cancel_session(client, db, auth_headers, invited):
+    organiser, _, session, invite = invited
+
+    response = client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    assert response.status_code == 200
+    assert response.json()["status"] is True
+
+    assert db.get(GamingSession, UUID(session["id"])).status == SessionStatus.CANCELLED
+    cancelled_invite = db.get(SessionInvite, UUID(invite["id"]))
+    assert cancelled_invite.status == InviteStatus.CANCELLED
+    assert cancelled_invite.responded_at is not None
+
+
+def test_only_organiser_can_cancel(client, auth_headers, invited):
+    _, invitee, session, _ = invited
+
+    response = client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(invitee))
+
+    assert response.status_code == 403
+
+
+def test_cannot_cancel_twice(client, make_user, auth_headers, create_session):
+    organiser = make_user()
+    session = create_session(organiser)
+
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+    response = client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    assert response.status_code == 409
+
+
+def test_cancel_unknown_session(client, make_user, auth_headers):
+    response = client.post(f"/sessions/{uuid4()}/cancel", headers=auth_headers(make_user()))
+
+    assert response.status_code == 404
+
+
+# --- POST /sessions/{session_id}/leave ----------------------------------------
+
+
+@pytest.fixture
+def joined(client, auth_headers, invited):
+    """Like `invited`, but the invitee has accepted and is a participant."""
+    organiser, invitee, session, invite = invited
+    response = client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+    assert response.status_code == 200, response.text
+    return organiser, invitee, session
+
+
+def test_leave_session(client, db, auth_headers, joined):
+    _, player, session = joined
+
+    response = client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(player))
+
+    assert response.status_code == 204
+    assert db.get(SessionParticipant, (UUID(session["id"]), player.id)) is None
+    assert db.get(GamingSession, UUID(session["id"])).player_count == 1
+    assert client.get("/sessions/", headers=auth_headers(player)).json() == []
+
+
+def test_leaving_private_session_removes_access(client, auth_headers, joined):
+    _, player, session = joined
+
+    client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(player))
+
+    response = client.get(f"/sessions/{session['id']}", headers=auth_headers(player))
+    assert response.status_code == 404
+
+
+def test_organiser_can_reinvite_after_leaving(auth_headers, client, send_invite, joined):
+    organiser, player, session = joined
+    client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(player))
+
+    response = send_invite(organiser, session["id"], player)
+
+    assert response.status_code == 201, response.text
+
+
+def test_organiser_cannot_leave(client, db, auth_headers, joined):
+    organiser, _, session = joined
+
+    response = client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(organiser))
+
+    assert response.status_code == 400
+    assert db.get(SessionParticipant, (UUID(session["id"]), organiser.id)) is not None
+
+
+def test_cannot_leave_session_not_in(client, db, auth_headers, invited):
+    _, invitee, session, invite = invited
+
+    response = client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(invitee))
+
+    assert response.status_code == 404
+    # A pending invite isn't touched by a failed leave.
+    assert db.get(SessionInvite, UUID(invite["id"])).status == InviteStatus.PENDING
+
+
+def test_cannot_leave_cancelled_session(client, auth_headers, joined):
+    organiser, player, session = joined
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    response = client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(player))
+
+    assert response.status_code == 409
+
+
+def test_leave_unknown_session(client, make_user, auth_headers):
+    response = client.post(f"/sessions/{uuid4()}/leave", headers=auth_headers(make_user()))
+
+    assert response.status_code == 404
+
+
+# --- DELETE /sessions/{session_id}/participants/{user_id} ---------------------
+
+
+def test_remove_participant(client, db, auth_headers, joined):
+    organiser, player, session = joined
+
+    response = client.delete(
+        f"/sessions/{session['id']}/participants/{player.id}", headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 204
+    assert db.get(SessionParticipant, (UUID(session["id"]), player.id)) is None
+    assert db.get(GamingSession, UUID(session["id"])).player_count == 1
+    # The removed player loses access to the private session.
+    assert client.get(f"/sessions/{session['id']}", headers=auth_headers(player)).status_code == 404
+
+
+def test_removed_player_can_be_reinvited(client, auth_headers, send_invite, joined):
+    organiser, player, session = joined
+    client.delete(
+        f"/sessions/{session['id']}/participants/{player.id}", headers=auth_headers(organiser)
+    )
+
+    response = send_invite(organiser, session["id"], player)
+
+    assert response.status_code == 201, response.text
+
+
+def test_only_organiser_can_remove_participants(client, db, make_user, auth_headers, create_session, send_invite):
+    organiser = make_user("organiser")
+    player_a = make_user("player_a")
+    player_b = make_user("player_b")
+    session = create_session(organiser)
+    for player in (player_a, player_b):
+        invite = send_invite(organiser, session["id"], player).json()
+        client.post(
+            f"/sessions/{session['id']}/accept",
+            json={"invite_id": invite["id"]},
+            headers=auth_headers(player),
+        )
+
+    response = client.delete(
+        f"/sessions/{session['id']}/participants/{player_b.id}", headers=auth_headers(player_a)
+    )
+
+    assert response.status_code == 403
+    assert db.get(SessionParticipant, (UUID(session["id"]), player_b.id)) is not None
+
+
+def test_organiser_cannot_remove_themselves(client, auth_headers, joined):
+    organiser, _, session = joined
+
+    response = client.delete(
+        f"/sessions/{session['id']}/participants/{organiser.id}", headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 400
+
+
+def test_cannot_remove_from_cancelled_session(client, auth_headers, joined):
+    organiser, player, session = joined
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    response = client.delete(
+        f"/sessions/{session['id']}/participants/{player.id}", headers=auth_headers(organiser)
+    )
+
+    assert response.status_code == 409
+
+
+def test_remove_user_not_in_session(client, make_user, auth_headers, joined):
+    organiser, _, session = joined
+
+    response = client.delete(
+        f"/sessions/{session['id']}/participants/{make_user('stranger').id}",
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 404
+
+
+def test_remove_from_unknown_session(client, make_user, auth_headers):
+    user = make_user()
+
+    response = client.delete(
+        f"/sessions/{uuid4()}/participants/{uuid4()}", headers=auth_headers(user)
+    )
+
+    assert response.status_code == 404
+
+
+# --- POST /sessions/{session_id}/invite ---------------------------------------
+
+
+def test_create_invite(invited):
+    organiser, invitee, session, invite = invited
+
+    assert invite["session_id"] == session["id"]
+    assert invite["sender_id"] == str(organiser.id)
+    assert invite["receiver_id"] == str(invitee.id)
+    assert invite["status"] == "pending"
+
+
+def test_only_organiser_can_invite(make_user, create_session, send_invite):
+    session = create_session(make_user("organiser"))
+
+    response = send_invite(make_user("stranger"), session["id"], make_user("target"))
+
+    assert response.status_code == 403
+
+
+def test_cannot_invite_same_user_twice(send_invite, invited):
+    organiser, invitee, session, _ = invited
+
+    response = send_invite(organiser, session["id"], invitee)
+
+    assert response.status_code == 409
+
+
+def test_invite_to_unknown_session(make_user, send_invite):
+    response = send_invite(make_user("organiser"), str(uuid4()), make_user("target"))
+
+    assert response.status_code == 404
+
+
+def test_reinvite_after_decline(client, auth_headers, send_invite, invited):
+    organiser, invitee, session, invite = invited
+    client.post(
+        f"/sessions/{session['id']}/decline",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    response = send_invite(organiser, session["id"], invitee)
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["id"] == invite["id"]
+    assert body["status"] == "pending"
+    assert body["responded_at"] is None
+
+    pending = client.get("/sessions/invites", headers=auth_headers(invitee)).json()
+    assert [i["id"] for i in pending] == [invite["id"]]
+
+
+def test_reopened_invite_can_be_accepted(client, db, auth_headers, send_invite, invited):
+    organiser, invitee, session, invite = invited
+    request = dict(json={"invite_id": invite["id"]}, headers=auth_headers(invitee))
+    client.post(f"/sessions/{session['id']}/decline", **request)
+    send_invite(organiser, session["id"], invitee)
+
+    response = client.post(f"/sessions/{session['id']}/accept", **request)
+
+    assert response.status_code == 200, response.text
+    assert db.get(SessionParticipant, (UUID(session["id"]), invitee.id)) is not None
+
+
+def test_cannot_invite_to_cancelled_session(
+    client, make_user, auth_headers, create_session, send_invite
+):
+    organiser = make_user("organiser")
+    session = create_session(organiser)
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    response = send_invite(organiser, session["id"], make_user("target"))
+
+    assert response.status_code == 409
+
+
+def test_cannot_invite_self(make_user, create_session, send_invite):
+    organiser = make_user("organiser")
+    session = create_session(organiser)
+
+    response = send_invite(organiser, session["id"], organiser)
+
+    assert response.status_code == 400
+
+
+def test_cannot_invite_unknown_user(client, make_user, auth_headers, create_session):
+    organiser = make_user("organiser")
+    session = create_session(organiser)
+
+    response = client.post(
+        f"/sessions/{session['id']}/invite",
+        json={"session_id": session["id"], "receiver_id": str(uuid4())},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 404
+
+
+def test_cannot_invite_existing_player(send_invite, joined):
+    organiser, player, session = joined
+
+    response = send_invite(organiser, session["id"], player)
+
+    assert response.status_code == 409
+
+
+def test_invite_rejects_mismatched_session_ids(
+    client, make_user, auth_headers, create_session
+):
+    organiser = make_user("organiser")
+    session = create_session(organiser)
+    other_session = create_session(organiser)
+
+    response = client.post(
+        f"/sessions/{session['id']}/invite",
+        json={"session_id": other_session["id"], "receiver_id": str(make_user("target").id)},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 400
+
+
+# --- GET /sessions/{session_id}/invites ---------------------------------------
+
+
+def test_organiser_sees_pending_invites(client, auth_headers, invited):
+    organiser, invitee, session, invite = invited
+
+    response = client.get(f"/sessions/{session['id']}/invites", headers=auth_headers(organiser))
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [i["id"] for i in body] == [invite["id"]]
+    assert body[0]["receiver"]["id"] == str(invitee.id)
+    assert body[0]["receiver"]["username"] == "invitee"
+
+
+@pytest.mark.parametrize("response_route", ["accept", "decline"])
+def test_sent_invites_exclude_answered(client, auth_headers, invited, response_route):
+    organiser, invitee, session, invite = invited
+    client.post(
+        f"/sessions/{session['id']}/{response_route}",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    response = client.get(f"/sessions/{session['id']}/invites", headers=auth_headers(organiser))
+
+    assert response.json() == []
+
+
+def test_only_organiser_sees_sent_invites(client, auth_headers, invited):
+    _, invitee, session, _ = invited
+
+    response = client.get(f"/sessions/{session['id']}/invites", headers=auth_headers(invitee))
+
+    assert response.status_code == 403
+
+
+def test_sent_invites_of_hidden_session(client, make_user, auth_headers, create_session):
+    session = create_session(make_user("organiser"), visibility="private")
+
+    response = client.get(
+        f"/sessions/{session['id']}/invites", headers=auth_headers(make_user("stranger"))
+    )
+
+    assert response.status_code == 404
+
+
+def test_sent_invites_of_unknown_session(client, make_user, auth_headers):
+    response = client.get(f"/sessions/{uuid4()}/invites", headers=auth_headers(make_user()))
+
+    assert response.status_code == 404
+
+
+# --- GET /sessions/invites ----------------------------------------------------
+
+
+def test_get_invites_returns_own_invites(client, make_user, auth_headers, invited):
+    _, invitee, _, invite = invited
+
+    invitee_invites = client.get("/sessions/invites", headers=auth_headers(invitee)).json()
+    stranger_invites = client.get(
+        "/sessions/invites", headers=auth_headers(make_user("stranger"))
+    ).json()
+
+    assert [i["id"] for i in invitee_invites] == [invite["id"]]
+    assert stranger_invites == []
+
+
+def test_get_invites_only_returns_pending(client, auth_headers, invited):
+    _, invitee, session, invite = invited
+    client.post(
+        f"/sessions/{session['id']}/decline",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    response = client.get("/sessions/invites", headers=auth_headers(invitee))
+
+    assert response.json() == []
+
+
+def test_get_invites_hides_full_sessions(
+    client, make_user, auth_headers, create_session, send_invite
+):
+    organiser = make_user("organiser")
+    joiner = make_user("joiner")
+    waiting = make_user("waiting")
+    session = create_session(organiser, player_limit=2)
+    joiner_invite = send_invite(organiser, session["id"], joiner).json()
+    send_invite(organiser, session["id"], waiting)
+
+    # The joiner takes the last place, so the session is now full.
+    client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": joiner_invite["id"]},
+        headers=auth_headers(joiner),
+    )
+
+    response = client.get("/sessions/invites", headers=auth_headers(waiting))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_invites_shows_full_session_again_when_a_place_frees_up(
+    client, make_user, auth_headers, create_session, send_invite
+):
+    organiser = make_user("organiser")
+    joiner = make_user("joiner")
+    waiting = make_user("waiting")
+    session = create_session(organiser, player_limit=2)
+    joiner_invite = send_invite(organiser, session["id"], joiner).json()
+    waiting_invite = send_invite(organiser, session["id"], waiting).json()
+    client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": joiner_invite["id"]},
+        headers=auth_headers(joiner),
+    )
+
+    client.post(f"/sessions/{session['id']}/leave", headers=auth_headers(joiner))
+
+    response = client.get("/sessions/invites", headers=auth_headers(waiting))
+    assert [i["id"] for i in response.json()] == [waiting_invite["id"]]
+
+
+def test_get_invites_keeps_sessions_without_a_limit(client, auth_headers, invited):
+    _, invitee, _, invite = invited  # the default session has no player limit
+
+    response = client.get("/sessions/invites", headers=auth_headers(invitee))
+
+    assert [i["id"] for i in response.json()] == [invite["id"]]
+
+
+def _move_session(db, session_id, start_at, end_at):
+    """Sessions can't be created in the past through the API, so tests move them directly."""
+    session = db.get(GamingSession, UUID(session_id))
+    session.start_at = start_at
+    session.end_at = end_at
+    db.commit()
+
+
+def test_get_invites_hides_finished_sessions(client, db, auth_headers, invited):
+    _, invitee, session, _ = invited
+    now = datetime.now(timezone.utc)
+    _move_session(db, session["id"], now - timedelta(hours=3), now - timedelta(hours=1))
+
+    response = client.get("/sessions/invites", headers=auth_headers(invitee))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_invites_keeps_sessions_in_progress(client, db, auth_headers, invited):
+    _, invitee, session, invite = invited
+    now = datetime.now(timezone.utc)
+    _move_session(db, session["id"], now - timedelta(hours=1), now + timedelta(hours=1))
+
+    response = client.get("/sessions/invites", headers=auth_headers(invitee))
+
+    assert [i["id"] for i in response.json()] == [invite["id"]]
+
+
+# --- POST /sessions/{session_id}/accept ---------------------------------------
+
+
+def test_accept_invite(client, db, auth_headers, invited):
+    _, invitee, session, invite = invited
+
+    response = client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    assert response.status_code == 200
+    assert db.get(SessionInvite, UUID(invite["id"])).status == InviteStatus.ACCEPTED
+    assert db.get(SessionParticipant, (UUID(session["id"]), invitee.id)) is not None
+    assert db.get(GamingSession, UUID(session["id"])).player_count == 2
+
+    invitee_sessions = client.get("/sessions/", headers=auth_headers(invitee)).json()
+    assert [s["id"] for s in invitee_sessions] == [session["id"]]
+
+
+def test_only_invitee_can_accept(client, auth_headers, invited):
+    organiser, _, session, invite = invited
+
+    response = client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 403
+
+
+def test_cannot_accept_twice(client, auth_headers, invited):
+    _, invitee, session, invite = invited
+    request = dict(
+        url=f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    client.post(**request)
+    response = client.post(**request)
+
+    assert response.status_code == 409
+
+
+def test_cannot_accept_into_full_session(
+    client, db, make_user, auth_headers, create_session, send_invite
+):
+    organiser = make_user("organiser")
+    invitee = make_user("invitee")
+    # The organiser takes the only place.
+    session = create_session(organiser, player_limit=1)
+    invite = send_invite(organiser, session["id"], invitee).json()
+
+    response = client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    assert response.status_code == 409
+    assert db.get(SessionParticipant, (UUID(session["id"]), invitee.id)) is None
+
+
+def test_cannot_accept_invite_to_cancelled_session(client, auth_headers, invited):
+    organiser, invitee, session, invite = invited
+    client.post(f"/sessions/{session['id']}/cancel", headers=auth_headers(organiser))
+
+    response = client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    assert response.status_code == 409
+
+
+def test_accept_unknown_invite(client, make_user, auth_headers):
+    response = client.post(
+        f"/sessions/{uuid4()}/accept",
+        json={"invite_id": str(uuid4())},
+        headers=auth_headers(make_user()),
+    )
+
+    assert response.status_code == 404
+
+
+# --- POST /sessions/{session_id}/decline --------------------------------------
+
+
+def test_decline_invite(client, db, auth_headers, invited):
+    _, invitee, session, invite = invited
+
+    response = client.post(
+        f"/sessions/{session['id']}/decline",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    assert response.status_code == 200
+    declined_invite = db.get(SessionInvite, UUID(invite["id"]))
+    assert declined_invite.status == InviteStatus.DECLINED
+    assert declined_invite.responded_at is not None
+    assert db.get(SessionParticipant, (UUID(session["id"]), invitee.id)) is None
+
+
+def test_only_invitee_can_decline(client, auth_headers, invited):
+    organiser, _, session, invite = invited
+
+    response = client.post(
+        f"/sessions/{session['id']}/decline",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(organiser),
+    )
+
+    assert response.status_code == 403
+
+
+def test_cannot_decline_after_accepting(client, auth_headers, invited):
+    _, invitee, session, invite = invited
+    client.post(
+        f"/sessions/{session['id']}/accept",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    response = client.post(
+        f"/sessions/{session['id']}/decline",
+        json={"invite_id": invite["id"]},
+        headers=auth_headers(invitee),
+    )
+
+    assert response.status_code == 409

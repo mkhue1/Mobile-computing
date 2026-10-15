@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">GamerCalendar</string>
+    <string name="app_name">Roundtable</string>
+    <string name="nfc_friend_share_description">Roundtable friend sharing</string>
 </resources>

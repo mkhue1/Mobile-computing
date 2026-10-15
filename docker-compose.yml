@@ -1,10 +1,16 @@
 services:
   backend:
     build: ./server
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     volumes:
       - ./server:/app
+    develop:
+      watch:
+        - action: sync
+          path: ./server
+          target: /app
     env_file:
       - .env
     depends_on:
@@ -14,7 +20,7 @@ services:
   db:
     image: postgres:17-alpine
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
