@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
@@ -70,6 +71,8 @@ private const val DEFAULT_ZOOM = 12f
 private const val SINGLE_SESSION_ZOOM = 14f
 private const val TRACKING_ZOOM = 15f
 private const val BOUNDS_PADDING_PX = 120
+// The compass sits in the map's top-left corner, so keep it below the Back button.
+private val CompassClearance = 64.dp
 private val locationPermissions = arrayOf(
     Manifest.permission.ACCESS_COARSE_LOCATION,
     Manifest.permission.ACCESS_FINE_LOCATION
@@ -169,6 +172,7 @@ fun SessionsMapScreen(
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
+            contentPadding = PaddingValues(top = if (onBack != null) CompassClearance else 0.dp),
             contentDescription = "Map of session locations",
             googleMapOptionsFactory = {
                 GoogleMapOptions().backgroundColor(BackgroundDark.toArgb())
